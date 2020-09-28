@@ -8,7 +8,9 @@ import hopfield_tetra
 
 
 prefix=raw_input('Prefix: ')
-no_of_kpoints=24
+no_of_kpoints=12
+
+
 Ry_to_eV=13.605693122994
 ab_to_ang=0.529177210903
 
@@ -22,7 +24,7 @@ SOC=0
 if SOC==1: CIN=1./137.0359895**2 #for treating big and small component of wave function
 else: CIN=4.0*1e-22
 
-
+   
 '''
 #NOT NEEDED
 print('Reading mass...'),
@@ -88,7 +90,7 @@ print('number of atoms:'+str(len(V)))
 print('number of r points:'+str(len(V[0])))
 na=len(V) #number of atoms
 nr=len(V[0]) #number of r-points
-
+ 
 
 
 print('Reading radial wave funtions...')
@@ -144,19 +146,19 @@ for i in NONEQ:
  h.write('\n')
 h.close()
 
-h.open('DOS/DOS.outputkgen')
+print('Read k-mesh...')
+h=open('DOS/DOS.outputkgen')
 tmp=h.readlines()
 h.close()
 for numi,i in enumerate(tmp):
- if ' point    coordinates     relation' in tmp:
-  tmp=tmp[i+1:i+nk**3+1]
+ if 'relation' in i:
+  tmp=tmp[numi+1:numi+1+(no_of_kpoints+1)**3]
   break
 EQUIV=[ int(i.split()[4]) for i in tmp]
 print EQUIV
   
 
 '''
-print('Making k-mesh...')
 ALL_K=[np.transpose(np.array([i/float(no_of_kpoints),j/float(no_of_kpoints),k/float(no_of_kpoints)])) for i in range(no_of_kpoints) for j in range(no_of_kpoints) for k in range(no_of_kpoints)]
 WHICH_K=[0 for i in range(no_of_kpoints**3)]
 for numi,i in enumerate(ALL_K):
@@ -250,7 +252,7 @@ for i in range(len(RADWF_1)):
   h.write('\n')
  h.close() 
 
-tetra=hopfield_tetra.tetrahedra(48,48,48,[i for i in range(len(ENE))]) #the matrix with tetrahedron. 
+tetra=hopfield_tetra.tetrahedra(no_of_kpoints,no_of_kpoints,no_of_kpoints,EQUIV) #the matrix with tetrahedron. 
 
 
 
