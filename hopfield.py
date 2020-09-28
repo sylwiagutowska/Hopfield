@@ -24,19 +24,6 @@ SOC=0
 if SOC==1: CIN=1./137.0359895**2 #for treating big and small component of wave function
 else: CIN=4.0*1e-22
 
-   
-'''
-#NOT NEEDED
-print('Reading mass...'),
-os.system('grep amass Nb.output0 >hopfield_tmp')
-#os.system('grep ":VOL " Nb.scf0 |head -n 1 >>hopfield_tmp')
-h=open('hopfield_tmp')
-tmp=h.readlines()
-h.close()
-mass=[ float(i.split()[2]) for i in tmp]
-print('Masses of atoms:',mass)
-mass=[i/Na for i in mass]
-'''
 
 print('Reading Volume...'),
 os.system('grep ":VOL " '+prefix+'.scf0 |head -n 1 >>hopfield_tmp')
@@ -47,22 +34,7 @@ h.close()
 os.system('rm hopfield_tmp')
 volume=float(tmp.split()[-1])
 print(volume)
-'''
-print('Reading symmetries...'),
-h=open(prefix+'.struct')
-tmp=h.readlines()
-h.close()
-SYMM=[]
-for numi,i in enumerate(tmp):
- if 'NUMBER OF SYMMETRY' in i:
-  ns=int(i.split()[0])
-  tmp=tmp[numi+1:]
-  break
-for numi,i in enumerate(tmp):
- if numi%4==0: SYMM.append([ [float(m) for m in i.replace('-',' -').split()[:3]] ])
- elif numi%4==1 or numi%4==2: SYMM[-1].append( [float(m) for m in i.replace('-',' -').split()[:3]])
-SYMM=[np.array(i) for i in SYMM]
-'''
+
 print('Reading potential...')
 h=open(prefix+'.vsp','r') #stored as V*r
 tmp=h.readlines()
@@ -116,92 +88,6 @@ for i in range(len(RADWF)):
   print(len(RADWF[i][j])),
  print(' ')
 
-
-print('Reading alm coefficients and kpoints...')
-#ALM=[ [[] for l in range(len(RADWF[i]))] for i in range(na)]
-tmp=[]
-for i in range(1,64):
- try: 
-  h=open('DOS/DOS.almblm_'+str(i),'r')
-  tmp.extend([m.split()  for m in h.readlines() if len(m.split())!=0])
-  h.close()
- except:
-  break
-
-#ALM[k][i][j][l][m] k-kpoint, i-atoms, j-band, l (orbital No), m - m-th coefficient (m=-l:l)
-ALM=[] #[ [[] for l in range(len(RADWF[i]))] for i in range(na)]
-NONEQ=[] #list of nonequiv kpoints
-for i in tmp:
- if 'K-POINT' in i[0]: 
-  ALM.append([])
-  NONEQ.append(np.array([round(float(m),3) for m in i[1:4]]))
- elif 'ATOM' in i[1]: ALM[-1].append([])
- elif 'weight' in i[-1]:  ALM[-1][-1].append( [ [] for k in range(lmin) ] )
- elif len(i)>10:
-  ALM[-1][-1][-1][int(i[0])].append(float(i[3])**2+float(i[4])**2) #alm* * alm = |alm|^2=re^2+im^2
-h=open('kpoints.dat','w')
-for i in NONEQ:
- for j in i:
-  h.write(str(j)+' ')
- h.write('\n')
-h.close()
-
-print('Read k-mesh...')
-h=open('DOS/DOS.outputkgen')
-tmp=h.readlines()
-h.close()
-for numi,i in enumerate(tmp):
- if 'relation' in i:
-  tmp=tmp[numi+1:numi+1+(no_of_kpoints+1)**3]
-  break
-EQUIV=[ int(i.split()[4]) for i in tmp]
-print EQUIV
-  
-
-'''
-ALL_K=[np.transpose(np.array([i/float(no_of_kpoints),j/float(no_of_kpoints),k/float(no_of_kpoints)])) for i in range(no_of_kpoints) for j in range(no_of_kpoints) for k in range(no_of_kpoints)]
-WHICH_K=[0 for i in range(no_of_kpoints**3)]
-for numi,i in enumerate(ALL_K):
- found=0
- print numi
- for j in SYMM:
-  k_new=np.matmul(j,i)
-  for l in range(3):
-   if k_new[l]>1: k_new[l]-=1
-   elif k_new[l]<-1: k_new[l]+=1
-  for numk,k in enumerate(NONEQ):
-   for l in range(3):
-    if k_new[l]==k[l]:
-     WHICH_K[numi]=numk
-     found=1
-     break
-  if found==1: break
-print NONEQ
-print WHICH_K
-'''
-print('Reading band energies...')
-ENE=[]
-tmp=[]
-weights=[]
-for i in range(1,64):
- try: 
-  h=open('DOS/DOS.energy_'+str(i),'r')
-  print 'Reading file DOS/DOS.energy_'+str(i)
-  tmp.extend([m.split() for m in h.readlines()[2:]])
-  h.close()
- except:
-  break
-
-#ENE[i][j] i-kpoint, j- band
-for i in tmp:
-  if len(i)==7: 
-   weights.append(i[6])
-   ENE.append([])
-  elif len(i)==2: 
-   ENE[-1].append(i[1])
-
-
-
 print('Making r-mesh...')
 RMESH=[] #RMESH[i][j] i -atom, j -r-point
 #(r_i=r0*exp((i-1)*dx)
@@ -252,8 +138,92 @@ for i in range(len(RADWF_1)):
   h.write('\n')
  h.close() 
 
-tetra=hopfield_tetra.tetrahedra(no_of_kpoints,no_of_kpoints,no_of_kpoints,EQUIV) #the matrix with tetrahedron. 
 
+
+
+print('Reading alm coefficients and kpoints...')
+tmp=[]
+for i in range(1,64):
+ try: 
+  h=open('DOS/DOS.almblm_'+str(i),'r')
+  tmp.extend([m.split()  for m in h.readlines() if len(m.split())!=0])
+  h.close()
+ except:
+  break
+
+#ALM[k][i][j][l] k-kpoint, i-atoms, j-band, l (orbital No) (summed over m)
+ALM=[] #[ [[] for l in range(len(RADWF[i]))] for i in range(na)]
+NONEQ=[] #list of nonequiv kpoints
+for i in tmp:
+ if 'K-POINT' in i[0]: 
+  ALM.append([])
+  NONEQ.append(np.array([round(float(m),3) for m in i[1:4]]))
+ elif 'ATOM' in i[1]: ALM[-1].append([])
+ elif 'weight' in i[-1]:  ALM[-1][-1].append( [ 0 for k in range(lmin) ] )
+ elif len(i)>10:
+  ALM[-1][-1][-1][int(i[0])] += (float(i[3])**2+float(i[4])**2) #alm* * alm = |alm|^2=re^2+im^2
+
+h=open('kpoints.dat','w')
+for i in NONEQ:
+ for j in i:
+  h.write(str(j)+' ')
+ h.write('\n')
+h.close()
+
+#rearrange
+#weights[na][ibnd][tetra[i][nt]]
+[n_k,n_at,n_band,n_l]=[len(ALM),len(ALM[0]),min([len(i[0]) for i in ALM]),lmin]
+ALM=[ [[[ALM[l][i][k][j] for l in range(n_k)] for k in range(n_band)] for j in range(n_l)] for i in range(n_at)]
+print(" No of noneq kpoints="+str(n_k))
+
+print('Read k-mesh...')
+h=open('DOS/DOS.outputkgen')
+tmp=h.readlines()
+h.close()
+for numi,i in enumerate(tmp):
+ if 'relation' in i:
+  tmp=tmp[numi+1:numi+1+(no_of_kpoints+1)**3]
+  break
+EQUIV=[ int(i.split()[4])-1 for i in tmp]
+
+  
+
+print('Reading band energies...'),
+ENE=[]
+tmp=[]
+weights=[]
+for i in range(1,64):
+ try: 
+  h=open('DOS/DOS.energy_'+str(i),'r')
+  print 'Reading file DOS/DOS.energy_'+str(i)
+  tmp.extend([m.split() for m in h.readlines()[2:]])
+  h.close()
+ except:
+  break
+
+#ENE[i][j] i-kpoint, j- band
+for i in tmp:
+  if len(i)>4 and int(i[-4])==len(ENE)+1: 
+   weights.append(i[-1])
+   ENE.append([])
+  elif len(i)==2: 
+   ENE[-1].append(i[1])
+#rearrange
+#et[ibnd][tetra[i][nt]]
+print("No of noneq kpoints="+str(len(ENE))+'='+str(n_k))
+ENE=[ [ENE[j][i] for j in range(len(ENE))] for i in range(n_band)]
+
+
+
+tetra=hopfield_tetra.tetrahedra(no_of_kpoints,no_of_kpoints,no_of_kpoints,EQUIV) #the matrix with 6*len(noneq) tetrahedrons. tetra[i][j] i-no of wierzcholek (i=1:4), j-no of tetrahedron  
+[etetra,wtetra]=hopfield_tetra.e_tetra(ENE, len(ENE),len(tetra),tetra,ALM[0],len(ALM[0]))
+#etetra - energies  arranged into tetrahedron 
+#(1 energy for 1 vertex of tetrahedron = 4energies per tetrahedron)
+#wtetra - weights arranged into tetrahedron and avaraged over tetrahedron
+# so we have 1 weight for 1 tetrahedron
+EF=0.4809652770
+[DOSofE,Atomweight] = hopfield_tetra.dos_t(etetra,wtetra,len(ENE),len(tetra),EF,len(ALM[0]))
+print 'DOS',(DOSofE)
 
 
 
