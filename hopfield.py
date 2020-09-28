@@ -144,6 +144,16 @@ for i in NONEQ:
  h.write('\n')
 h.close()
 
+h.open('DOS/DOS.outputkgen')
+tmp=h.readlines()
+h.close()
+for numi,i in enumerate(tmp):
+ if ' point    coordinates     relation' in tmp:
+  tmp=tmp[i+1:i+nk**3+1]
+  break
+EQUIV=[ int(i.split()[4]) for i in tmp]
+print EQUIV
+  
 
 '''
 print('Making k-mesh...')
