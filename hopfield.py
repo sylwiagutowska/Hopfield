@@ -139,9 +139,47 @@ for i in range(len(RADWF_1)):
  h.close() 
 
 
+print('Read k-mesh...')
+h=open('DOS/DOS.outputkgen')
+tmp=h.readlines()
+h.close()
+for numi,i in enumerate(tmp):
+ if 'relation' in i:
+  tmp=tmp[numi+1:numi+1+(no_of_kpoints+1)**3]
+  break
+EQUIV=[ int(i.split()[4])-1 for i in tmp if int(i.split()[1])!=no_of_kpoints and int(i.split()[2])!=no_of_kpoints and int(i.split()[3])!=no_of_kpoints]
+print("No of all kpoints="+str(len(EQUIV))+' should be = '+str(no_of_kpoints**3))
+  
 
+print('Reading band energies...'),
+ENE=[]
+tmp=[]
+print('Files:'),
+weights=[]
+for i in range(1,64):
+ try: 
+  h=open('DOS/DOS.energy_'+str(i),'r')
+  print ' DOS/DOS.energy_'+str(i),
+  tmp.extend([m.split() for m in h.readlines()[2:]])
+  h.close()
+ except:
+  break
 
-print('Reading alm coefficients and kpoints...')
+#ENE[i][j] i-kpoint, j- band
+for i in tmp:
+  if len(i)>4 and int(i[-4])==len(ENE)+1: 
+   weights.append(i[-1])
+   ENE.append([])
+  elif len(i)==2: 
+   ENE[-1].append(i[1])
+#rearrange
+#et[ibnd][tetra[i][nt]]
+print("; No of noneq kpoints="+str(len(ENE))), 
+n_band=min([ len(i) for i in ENE])
+ENE=[ [float(ENE[j][i]) for j in range(len(ENE))] for i in range(n_band)]
+print("; No of bands="+str(len(ENE)))
+
+print('Reading alm coefficients and kpoints...'),
 tmp=[]
 for i in range(1,64):
  try: 
@@ -150,7 +188,6 @@ for i in range(1,64):
   h.close()
  except:
   break
-
 #ALM[k][i][j][l] k-kpoint, i-atoms, j-band, l (orbital No) (summed over m)
 ALM=[] #[ [[] for l in range(len(RADWF[i]))] for i in range(na)]
 NONEQ=[] #list of nonequiv kpoints
@@ -171,52 +208,17 @@ for i in NONEQ:
 h.close()
 
 #rearrange
-#weights[na][ibnd][tetra[i][nt]]
-[n_k,n_at,n_band,n_l]=[len(ALM),len(ALM[0]),min([len(i[0]) for i in ALM]),lmin]
+#from: #ALM[k][i][j][l] k-kpoint, i-atoms, j-band, l (orbital No) (summed over m)
+#to: weights[na][ibnd][kpoint]
+[n_k,n_at,n_l]=[len(ALM),1,lmin]
 ALM=[ [[[ALM[l][i][k][j] for l in range(n_k)] for k in range(n_band)] for j in range(n_l)] for i in range(n_at)]
 print(" No of noneq kpoints="+str(n_k))
 
-print('Read k-mesh...')
-h=open('DOS/DOS.outputkgen')
-tmp=h.readlines()
-h.close()
-for numi,i in enumerate(tmp):
- if 'relation' in i:
-  tmp=tmp[numi+1:numi+1+(no_of_kpoints+1)**3]
-  break
-EQUIV=[ int(i.split()[4])-1 for i in tmp]
-
-  
-
-print('Reading band energies...'),
-ENE=[]
-tmp=[]
-weights=[]
-for i in range(1,64):
- try: 
-  h=open('DOS/DOS.energy_'+str(i),'r')
-  print 'Reading file DOS/DOS.energy_'+str(i)
-  tmp.extend([m.split() for m in h.readlines()[2:]])
-  h.close()
- except:
-  break
-
-#ENE[i][j] i-kpoint, j- band
-for i in tmp:
-  if len(i)>4 and int(i[-4])==len(ENE)+1: 
-   weights.append(i[-1])
-   ENE.append([])
-  elif len(i)==2: 
-   ENE[-1].append(i[1])
-#rearrange
-#et[ibnd][tetra[i][nt]]
-print("No of noneq kpoints="+str(len(ENE))+'='+str(n_k))
-ENE=[ [ENE[j][i] for j in range(len(ENE))] for i in range(n_band)]
-
-
 
 tetra=hopfield_tetra.tetrahedra(no_of_kpoints,no_of_kpoints,no_of_kpoints,EQUIV) #the matrix with 6*len(noneq) tetrahedrons. tetra[i][j] i-no of wierzcholek (i=1:4), j-no of tetrahedron  
+print('No of tetrahedrons='+str(len(tetra[0])))
 [etetra,wtetra]=hopfield_tetra.e_tetra(ENE, len(ENE),len(tetra),tetra,ALM[0],len(ALM[0]))
+
 #etetra - energies  arranged into tetrahedron 
 #(1 energy for 1 vertex of tetrahedron = 4energies per tetrahedron)
 #wtetra - weights arranged into tetrahedron and avaraged over tetrahedron

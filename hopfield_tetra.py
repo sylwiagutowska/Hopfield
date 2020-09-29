@@ -1,4 +1,5 @@
 #this function do tetrahedra exactly like in QE (/~/qe-6.0/PW/src/kpoint_grid.f90)
+import numpy as np
 def tetrahedra(nk1,nk2,nk3,equiv):
 	tetra=[[0 for k in range(6*nk1*nk2*nk3)] for i in range(4)]
 	for i in range(nk1):
