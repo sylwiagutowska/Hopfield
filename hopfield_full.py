@@ -6,6 +6,7 @@ import hopfield_tetra
 from scipy.special import sph_harm
 from scipy.integrate import quad
 from scipy.misc import derivative
+
 #############FOR Nb eta=7.627eV/ang^2 [papaconsta.. 2002] or 4.7 eV/ang^2 (allen-dynes)
 
 def sil(n):
@@ -39,52 +40,44 @@ def ynim(m,l,tet,fi):
 
 def spec_int(l1,m1,l2,m2,l3,m3):
 # if m1==l1: return 0.
- j=complex(0,1)
+# j=complex(0,1)
  #sph_harm(m,l,fi,teta)
- '''
- out1=dblquad(lambda fi, tet: np.real((m1*sph_harm(m1,l1,fi,tet)/np.tan(fi)+(l1-m1)*(l1+m1+1)**0.5*(np.exp(-j*tet))*sph_harm(m1+1,l1,fi,tet))*np.conj(sph_harm(m2,l2,fi,tet))*sph_harm(m3,l3,fi,tet)), 0.01, .99*np.pi, lambda fi: 0.01, lambda fi: .99*np.pi)
- out2=dblquad(lambda fi, tet: np.imag((m1*sph_harm(m1,l1,fi,tet)/np.tan(fi)+(l1-m1)*(l1+m1+1)**0.5*(np.exp(-j*tet))*sph_harm(m1+1,l1,fi,tet))*np.conj(sph_harm(m2,l2,fi,tet))*sph_harm(m3,l3,fi,tet)), 0.01, .99*np.pi, lambda fi: 0.01, lambda fi: .99*np.pi)
- out1+=dblquad(lambda fi, tet: np.real((m1*sph_harm(m1,l1,fi,tet)/np.tan(fi)+(l1-m1)*(l1+m1+1)**0.5*(np.exp(-j*tet))*sph_harm(m1+1,l1,fi,tet))*np.conj(sph_harm(m2,l2,fi,tet))*sph_harm(m3,l3,fi,tet)), 0.01, .99*np.pi, lambda fi: 1.01*np.pi, lambda fi: .99*2*np.pi)
- out2+=dblquad(lambda fi, tet: np.imag((m1*sph_harm(m1,l1,fi,tet)/np.tan(fi)+(l1-m1)*(l1+m1+1)**0.5*(np.exp(-j*tet))*sph_harm(m1+1,l1,fi,tet))*np.conj(sph_harm(m2,l2,fi,tet))*sph_harm(m3,l3,fi,tet)), 0.01, .99*np.pi, lambda fi: 1.01*np.pi, lambda fi: .99*2*np.pi)
- '''
- '''
- out1=dblquad(lambda fi, tet: np.real(complex(derivative(lambda x: np.real(sph_harm(m1,l1,x,tet)),fi),derivative(lambda x: np.imag(sph_harm(m1,l1,x,tet)),fi))*np.conj(sph_harm(m2,l2,fi,tet))*sph_harm(m3,l3,fi,tet)), 0.01,.99*np.pi, lambda fi: 0.01, lambda fi: .99*np.pi)
- out2=dblquad(lambda fi, tet: np.imag(complex(derivative(lambda x: np.real(sph_harm(m1,l1,x,tet)),fi),derivative(lambda x: np.imag(sph_harm(m1,l1,x,tet)),fi))*np.conj(sph_harm(m2,l2,fi,tet))*sph_harm(m3,l3,fi,tet)), 0.01,.99*np.pi, lambda fi: 0.01, lambda fi: .99*np.pi)
- '''
+ out1=quad(lambda tet: np.real(sph_harm(m1,l1,0,tet)*np.conj(sph_harm(m2,l2,0,tet))*sph_harm(m3,l3,0,tet)), 0.0, np.pi)
+ out2=quad(lambda tet: np.imag(sph_harm(m1,l1,0,tet)*np.conj(sph_harm(m2,l2,0,tet))*sph_harm(m3,l3,0,tet)), 0.0, np.pi)
+ return 2*np.pi*m1*complex(-round(out2[0],6),round(out1[0],6)) #calka*2*pi*m*i
 
 
- out1,out2=0,0
- nfi,ntet=200,100
- dfi,dtet=2*np.pi/(nfi-1),np.pi/(ntet-1)
- for n in range(0,ntet):
-  for m in range(0,nfi):
-   tet=n*dtet
-   fi=m*dfi
-   x=(sph_harm(m1,l1,fi,tet)-sph_harm(m1,l1,fi-dfi,tet))*np.conj(sph_harm(m2,l2,fi,tet))*sph_harm(m3,l3,fi,tet)
-   if x<100000000: out1+=x
- return complex(round(np.real(out1)*dtet,6),round(np.imag(out1)*dtet,6))
- '''
- for i in range(1,n_fi):
-  fi=i*dfi
-  for j in range(1,n_tet):
-   tet=j*dtet
-   dydfi=m1*np.cos(fi)/np.sin(fi)*YLM[l1][l1+m1][i][j] +((l1-m1)*(l1+m1+1))**0.5*(np.exp(-j*tet))*YLM[l1][l1+m1+1][i][j]
-   out+=dydfi #*np.conj(YLM[l2][l2+m2][i][j])*YLM[l3][l3+m3][i][j]
- return out*dfi*dtet
- '''
 ################RADWF AND V are already multiplied by r
-'''
-for l1 in range(8):
- for m1 in range(-l1,l1+1):
-  for l2 in range(8):
-   for m2 in range(-l1,l1+1):
-    for l3 in range(8):
-     for m3 in range(-l1,l1+1):
-      print l1,m1,l2,m2,l3,m3,spec_int(l1,m1,l2,m2,l3,m3)
-'''
-print spec_int(1,-1,0,0,1,1)
-exit()
 
+'''
+from sympy import Ynm, Symbol,pi,symbols
+from sympy import integrate,diff,conjugate, I,Piecewise,Ne,sin
+n = symbols('n', integer = True)
+m = symbols('m', integer = True)
+o = symbols('o', integer = True)
+p = symbols('p', integer = True)
+r = symbols('r', integer = True)
+s = symbols('s', integer = True)
+theta = Symbol("theta")
+phi = Symbol("phi")
+#print spec_int(1,-1,0,0,1,1)
+print Ynm(n, m, theta, phi)
+#print integrate(diff(Ynm(n,m,theta,phi),phi)*Ynm(o,p,theta,phi).conjugate()*Ynm(r,s,theta,phi),(phi,0,2*pi))
+print integrate(Ynm(n,m,theta,0)*Ynm(o,p,theta,0).conjugate()*Ynm(r,s,theta,0),(theta,0,pi))
+#integrate(sin(theta)*Ynm(n, m, theta, phi)*Ynm(o, p, theta, phi).conjugate()*Ynm(r, s, theta, phi), (theta))
+#diff(Ynm(n,m,theta,phi),phi)*
+#print (integrate(Ynm(1, 0, theta, phi)*Ynm(1, 1, theta, phi)*Ynm(2, 1, theta, phi)/2
+#,theta))
+
+for l1 in range(2):
+ for m1 in range(-l1,l1+1): 
+  for l2 in range(2):
+   for m2 in range(-l2,l2+1):
+    for l3 in range(2):
+     for m3 in range(-l3,l3+1):
+      if m3==m2-m1: print(l1,m1,l2,m2,l3,m3,spec_int(l1,m1,l2,m2,l3,m3))
+exit()
+'''
 
 prefix='Al' #raw_input('Prefix: ')
 
@@ -342,18 +335,20 @@ for at in range(1):#n_at):
   [l1,m1]=LM[at][nlm1]
   for nlm2 in range(len(LM[at])):
    [l2,m2]=LM[at][nlm2]
-   for l3 in range(3,4):#len(LM[at])):
+   for l3 in range(10):#len(LM[at])):
     for m3 in range(-l3,l3+1):#len(LM[at])):
-     for l4 in range(3,4):#len(LM[at])):
+     for l4 in range(10):#len(LM[at])):
       for m4 in range(-l4,l4+1):#len(LM[at])):
-       Bx1=spec_int(l1,m1,l3,m3,l4,m4,n_fi,n_tet,YLM)
        Ax1=three_y(l1,m1,l4,m4,l3,m3)
-       for l5 in range(3,4):#len(LM[at])):
+       if m4==m3-m1 and m1!=0:  Bx1=spec_int(l1,m1,l3,m3,l4,m4)
+       else: Bx1=0.
+       for l5 in range(10):#len(LM[at])):
         for m5 in range(-l5,l5+1):#len(LM[at])):
-         for l6 in range(3,4):#len(LM[at])):
+         for l6 in range(10):#len(LM[at])):
           for m6 in range(-l6,l6+1):#len(LM[at])):
            Ax=Ax1*three_y(l2,m2,l6,m6,l5,m5)
-           Bx=Bx1*spec_int(l2,m2,l5,m5,l6,m6,n_fi,n_tet,YLM)
+           if m6==m5-m2 and m4==m3-m1 and m2!=0:  Bx=Bx1*spec_int(l2,m2,l5,m5,l6,m6)
+           else: Bx=0.
            Cx=-m1*m2*Ax 
 
            '''
