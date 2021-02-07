@@ -1,14 +1,23 @@
 import numpy as np
 import os
 import glob
-import hopfield_tetra
+#import hopfield_tetra
 #from math import factorial as sil
 from scipy.special import sph_harm
 from scipy.integrate import quad
 from scipy.misc import derivative
+from multiprocessing import Process,Pool
 sqrtpm1=(np.pi)**(-0.5)
-degauss=0.02
+degauss=0.05
+prefix=os.getcwd().split('/')[-1]
+print(prefix)
+
 #############FOR Nb eta=7.627eV/ang^2 [papaconsta.. 2002] or 4.7 eV/ang^2 (allen-dynes)
+##mathematica SphericalHarmonicy(l,m,theta,phi). theta in [0,pi), phi in [0,2pi]
+##scipy scipy.special.sph_harm(m, l, theta, phi) , theta in [0,2pi], phi in [0,pi]
+##sympy.functions.special.spherical_harmonics.Ynm(l,m,theta,phi . theta in [0,pi), phi in [0,2pi]
+def round_complex(z,precis):
+ return round(z.real,precis)+round(z.imag,precis)*1j
 
 def sil(n):
  if n<0: raise ValueError('w silni n='+str(n)+'<0')
@@ -46,7 +55,7 @@ def spec_int(l1,m1,l2,m2,l3,m3):
  return 2*np.pi*m1*complex(-round(out2[0],6),round(out1[0],6)) #calka*2*pi*m*i
 
 
-################RADWF AND V are already multiplied by r
+################RADWF is already multiplied by r and Vtotal - by r^2
 '''
 for l1 in range(2):
  for m1 in range(-l1,l1+1):
@@ -58,7 +67,8 @@ for l1 in range(2):
 exit()
 '''
 
-prefix='Al' #raw_input('Prefix: ')
+
+#prefix='Nb' #raw_input('Prefix: ')
 
 Ry_to_eV=13.605693122994
 ab_to_ang=0.529177210903
@@ -95,6 +105,7 @@ os.system('rm hopfield_tmp')
 Z_of_atoms=[float(i.split()[-1]) for i in tmp]
 print(Z_of_atoms)
 
+
 print('Read total potential...')
 h=open('vtotal/vtotal.vtotal')
 tmp=h.readlines()
@@ -112,21 +123,21 @@ for i in tmp:
  elif len(i.split())==0: continue
  elif len(Vtot)!=0:
    m=i[3:-1]
-   for j in range(len(m)/19):
+   for j in range(int(len(m)/19)):
     Vtot[-1][-1].append(float(m[j*19:(j+1)*19]))
 
 n_at=len(Vtot) #number of atoms
 nr=len(Vtot[0][0]) #number of r-points
-print n_at,nr, LM
+print (n_at,nr, LM)
 
 
 print('Reading radial wave funtions...')
-h=open('RADWF/RADWF.radwf','r')
+h=open('DOS/DOS.radwf','r')
 tmp=h.readlines()
 h.close()
 
-RADWF=[]   #RADWF[i][j][k][0-3] i-atoms, j- l (orbital No), k - r-mesh, [0-1]-large or small component of radwf, [2-3]- large or small component of udot
-RADWFsmall=[]
+RADWF=[]   #RADWF[i][j][k][0-1] i-atoms, j- l (orbital No), k - r-mesh, [0-1]-large  component of radwf and udot
+RADWFsmall=[] #RADWFsmall[i][j][k][0-1] i-atoms, j- l (orbital No), k - r-mesh, [0-1]-  small component of radwf and udot
 mesh_info=[]
 for i in tmp:
  if str(nr) in i.split(): 
@@ -140,7 +151,6 @@ for i in tmp:
    RADWFsmall[-1][-1].append(np.array([float(i.split()[1]),float(i.split()[3])]))
   except:continue
 n_l=min([ len(i) for i in RADWF])
-
 
 
 for i in range(len(RADWF)):
@@ -163,27 +173,37 @@ for i in mesh_info:
 
 ###devide V by Q
 ###and multiply by 2 to obtain Hartree -> Ry
-#oryginalnie w pliku *vtotal jest zapisany V*R^2, wiec dzielimy przez R by dostac czysty V
-### for L=0 M=0 (czesc sferyczna) Vtot jest rowny V.vsp [zobacz plik V_0.dat]
-Vtot=[ [[Vtot[i][j][k]/(RMESH[i][k]**2)/Z_of_atoms[i]*2 for k in range(len(Vtot[i][j]))] for j in range(len(Vtot[i]))] for i in range(len(Vtot))]   
+#oryginalnie w pliku *vtotal jest zapisany V*R^2, wiec dzielimy przez R^2 by dostac czysty V
+#Vtot=[ [[Vtot[i][j][k]/(RMESH[i][k]**2)/Z_of_atoms[i]*2 for k in range(len(Vtot[i][j]))] for j in range(len(Vtot[i]))] for i in range(len(Vtot))]   
+#Vtot=[ [[Vtot[i][j][k]/(RMESH[i][k]**2) for k in range(len(Vtot[i][j]))] for j in range(len(Vtot[i]))] for i in range(len(Vtot))]  
+Vtot=[ [[Vtot[i][j][k]/(RMESH[i][k]) for k in range(len(Vtot[i][j]))] for j in range(len(Vtot[i]))] for i in range(len(Vtot))]  
+
+#RADWF[i][j][k][0-1] i-atoms, j- l (orbital No), k - r-mesh, [0-1]-large  component of radwf and udot
+#oryginalnie w pliku *radwf jest zapisany radwf*R, wiec dzielimy przez R by dostac czysty radwf
+RADWF=[ [[[RADWF[i][j][k][m]/(RMESH[i][k]) for m in range(2)] for k in range(len(RADWF[i][j]))] for j in range(len(RADWF[i]))] for i in range(len(RADWF))]   
 
 print('Write spherical V and radwf to files V_i.dat and RADWF_i.dat...')
 for i in range(len(Vtot)):
  h=open('V_'+str(i)+'.dat','w')
  for j in range(len(Vtot[i][0])):
-  h.write(str(RMESH[i][j])+' '+str(Vtot[i][0][j])+' ')
+  h.write(str(RMESH[i][j])+' ')
+  for k in range(len(Vtot[i])):
+   h.write(str(Vtot[i][k][j])+' ')
   h.write('\n')
  h.close()
 
+
 for i in range(len(RADWF)):
+ print('aa')
  h=open('RADWF_'+str(i)+'.dat','w')
  h.write('# r , l=0- big component,small component, l=1- big component,small component....\n')
- for j in range(len(RADWF[i])):
-  h.write(str(RMESH[i][j])+' ')
-  for k in range(len(RADWF[i][j])):
+ for k in range(len(RADWF[i][1])):
+  h.write(str(RMESH[i][k])+' ')
+  for j in range(len(RADWF[i])):
    h.write(str(RADWF[i][j][k][0])+' '+str(RADWF[i][j][k][1])+' ')
   h.write('\n')
  h.close() 
+
 
 print('Read EF and total DOS...'),
 
@@ -193,74 +213,13 @@ h.close()
 sign=0
 for j in tmp[-10:]:
  if sign==1:
-   TOTDOS=[ round(float(m),5) for m in j.split()]
+   [E_f,dos]=[ round(float(m),5) for m in j.split()]
    break
  if ' ******** EF and DOS at fermi level *******' in j:
    sign=1
-for j in TOTDOS:
-  print(str(j)+' '),
-print(' ')
 
-E_f=TOTDOS[0]
 
-print('Reading band energies...'),
-ENE=[]
-tmp=[]
-print('Files:'),
-kweights=[]
-for i in range(1,64):
- try: 
-  h=open('DOS/DOS.energy_'+str(i),'r')
-  print ' DOS/DOS.energy_'+str(i),
-  tmp.extend([m.split() for m in h.readlines()[2:]])
-  h.close()
- except:
-  break
-if i==1:
-  h=open('DOS/DOS.energy','r')
-  print ' DOS/DOS.energy',
-  tmp.extend([m.split() for m in h.readlines()[2:]])
-  h.close()
 
-#ENE[i][j] i-kpoint, j- band
-for i in tmp:
-  if len(i)>4 and int(i[-4])==len(ENE)+1: 
-   kweights.append(float(i[-1]))
-   ENE.append([])
-  elif len(i)==2: 
-   ENE[-1].append(i[1])
-#rearrange
-#et[ibnd][tetra[i][nt]]
-print("; No of noneq kpoints="+str(len(ENE))), 
-n_k,n_band=len(kweights),min([ len(i) for i in ENE])
-ENE=[ [float(ENE[j][i]) for i in range(n_band)] for j in range(len(ENE))]
-#ENE=[ [float(ENE[j][i]) for j in range(len(ENE))] for i in range(n_band)]
-print("; No of bands="+str(len(ENE[0])))
-ENE_weights=[ [0 for i in range(n_band)] for j in range(n_k)]
-# weights for integrals over k (cold smearing)
-for k in range(n_k):
- for iband in range(n_band):
-          eef=E_f-ENE[k][iband]
-          arg=min(200., (eef - 2.**(-0.5) ) **2)
-          ENE_weights[k][iband]=(kweights[k]*sqrtpm1*np.exp(-arg)*(2.-(2**0.5*eef)))
-'''
-ENE2=[ [float(ENE[j][i]) for j in range(len(ENE)) ] for i in range(n_band)]
-
-print('Which bands cross Fermi level: '),
-band_f=[]
-for ni,i in enumerate(ENE2):
- old=i[0]
- is_fermi=0
- for j in i:
-  if (j-E_f)*(old-E_f)<0:
-   is_fermi=1
-   band_f.append(ni)
-   break
-
-n_band=len(band_f)
-print n_band,'bands:',band_f
-ENE=[ [float(ENE[j][i]) for i in band_f] for j in range(len(ENE))]
-'''
 
 
 print('Reading alm coefficients and kpoints...'),
@@ -277,7 +236,8 @@ if len(tmp)==0:
   tmp.extend([m.split()  for m in h.readlines() if len(m.split())!=0])
   h.close()
 
-#ALMBLM[k][i][j][l][m][0-3] k-kpoint, i-atoms, j-band, l (orbital No), m, [0: Re[Alm]+j*Im[Alm], 1:  Re[Blm]+j*Im[Blm]]
+
+#ALM are in file only for occupied (or partially occupied) bands, so the number of bands is smaller here than in *energy files
 ALMBLM=[] 
 #NONEQ=[] #list of nonequiv kpoints
 for i in tmp:
@@ -291,142 +251,192 @@ for i in tmp:
   ALMBLM[-1][-1][-1][int(i[0])].append([complex(float(i[3]),float(i[4])),complex(float(i[6]),float(i[7]))]) 
 
 
+#transpose to get: from ALMBLM[kp][at] to ALMBLM[at][kp]
+ALMBLM=[[ALMBLM[i][j] for i in range(len(ALMBLM))] for j in range(n_at)]
+#ALMBLM[i][k][j][l][m][0-3]  i-atoms,k-kpoint, j-band, l (orbital No), m, [0: Re[Alm]+j*Im[Alm], 1:  Re[Blm]+j*Im[Blm]]
 
-'''
-h=open('kpoints.dat','w')
-for i in NONEQ:
- for j in i:
-  h.write(str(j)+' ')
- h.write('\n')
-h.close()
-'''
 
+print('Reading band energies...'),
+ENE=[]
+tmp=[]
+print('Files:'),
+kweights=[]
+for i in range(1,64):
+ try: 
+  h=open('DOS/DOS.energy_'+str(i),'r')
+  print( ' DOS/DOS.energy_'+str(i)),
+  tmp.extend([m.split() for m in h.readlines()[2:]])
+  h.close()
+ except:
+  break
+if i==1:
+  h=open('DOS/DOS.energy','r')
+  print( ' DOS/DOS.energy'),
+  tmp.extend([m.split() for m in h.readlines()[2:]])
+  h.close()
+
+#ENE[i][j] i-kpoint, j- band
+for i in tmp:
+  if len(i)>4 and int(i[-4])==len(ENE)+1: 
+   kweights.append(float(i[-1]))
+   ENE.append([])
+  elif len(i)==2: 
+   ENE[-1].append(i[1])
 #rearrange
-#from: #ALM[k][i][j][l] k-kpoint, i-atoms, j-band, l (orbital No) (summed over m)
-#to: weights[na][ibnd][kpoint]
+#et[ibnd][tetra[i][nt]]
+print("; No of noneq kpoints="+str(len(ENE))), 
+n_k,n_band=len(kweights),min([ len(i) for i in ENE])
+n_k_total=sum(kweights)
+print("; Total number of kpoints="+str(n_k_total))
+#choose only energies of  which are considered in *almblm (only (fully or partially) occupied)
+ENE=[ [float(ENE[k][i]) for i in range(len(ALMBLM[0][k]))] for k in range(len(ENE))]
+#ENE=[ [float(ENE[j][i]) for j in range(len(ENE))] for i in range(n_band)]
+print("; No of bands="+str(len(ENE[0])))
+ENE_weights=[ [] for j in range(n_k)]
+# weights for integrals over k (cold smearing)
+#  ! cold smearing  (Marzari-Vanderbilt-DeVita-Payne)
+#  if (n.eq. - 1) then
+#     arg = min (200.d0, (x - 1.0d0 / sqrt (2.0d0) ) **2)
+#     w0gauss = sqrtpm1 * exp ( - arg) * (2.0d0 - sqrt ( 2.0d0) * x)
+#     return
+#           w0g1 = w0gauss ( (ef1 - et (ibnd, ikk) ) / degauss1, ngauss1) &
+#                / degauss1
 
-#ALM=[ [[[ALM[l][i][k][j] for l in range(n_k)] for k in range(n_band)] for j in range(n_l)] for i in range(n_at)]
+for k in range(n_k):
+ for iband in ENE[k]:
+          eef=(E_f-iband)/degauss
+          arg=min(200., (eef - 2.**(-0.5) ) **2)
+          ENE_weights[k].append((kweights[k]*sqrtpm1*np.exp(-arg)*(2.-(2**0.5*eef)))/degauss)
+
+
+
 print(" No of noneq kpoints="+str(n_k))
  
 
-
-
-
-
-print('Call spherical harmonics')
-#YLM[at][lm][nfi][ntet]
-n_fi,n_tet=20,10
-YLM=[[] for i in range(n_l)]
-mesh=np.meshgrid(np.linspace(0.,pi,n_tet),np.linspace(0.,2.*pi,n_fi))
-for l in range(n_l):
- for m in range(-l,l+1):
-#  YLM[l].append([])
-#  for i in range(n_fi):
-#   YLM[l][-1].append([])
-#   for j in range(n_tet):
-    YLM[l].append(sph_harm(m,l,mesh[1],mesh[0]))
-print len(YLM[3]), len(YLM[3][0]), (YLM[3][0][0])
-
-
-#all_spec_int=[[[[[[spec_int(l1,m1,l2,m2,l3,m3,n_fi,n_tet,YLM) for m3 in range(-l3,l3+1)] for l3 in range(n_l)] for m2 in range(-l2,l2+1)] for l2 in range(n_l)] for m1 in range(-l1,l1+1)] for l1 in range(n_l)]
-
-
 #Vtot=[] #[atom][lm][r]
 #LM=[] #[atom][list of lm 
-n_l=5
-Hopfield,Hopfield2=0.,0.
+#n_l=6
+dr=[[0]+[ RMESH[at][i]-RMESH[at][i-1] for i in range(1,nr)] for at in range(n_at)]  
 
-dtet=pi/n_tet
-dfi=2*pi/n_fi
-sintet=np.sin(np.linspace(0,pi,n_tet))
-dr=[[0]+[ RMESH[at][i]-RMESH[at][i-1] for i in range(1,nr)] for at in range(n_at)]
-print len(dr[0])
-print('Calculate eta...')
-k,kp,iband,jband=0,0,0,0
-for at in range(1):#n_at):
- do_b=0
- for nlm1 in range(1,len(LM[at])):
-  print nlm1
+def r_integral(RMESH_at,RADWF_at,Vtot_at,dr_at,l3,l4,nlm1):
+      B_and_C_r,A_r=np.array([0.j,0.j]),np.array([0.j,0.j])
+      B_and_C_r2,A_r2=np.array([0.j,0.j]),np.array([0.j,0.j])
+      for nr1,r1 in enumerate(RMESH_at): 
+       if nr1==0: continue  
+       dr1=dr_at[nr1]
+       '''  
+       #if Vr^2 devided by r^2
+       dv1dr=(Vtot_at[nlm1][nr1]-Vtot_at[nlm1][nr1-1])
+       B_and_C_r+=r1*Vtot_at[nlm1][nr1]*np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1]*dr1 
+       A_r+= r1**2*dv1dr *np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1] 
+       B_and_C_r2+=r1*Vtot_at[nlm1][nr1]*np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1][::-1]*dr1
+       A_r2+= r1**2*dv1dr *np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1][::-1]
+       '''
+       '''
+       #if Vr^2 not devided 
+       dv1dr=(Vtot_at[nlm1][nr1]-Vtot_at[nlm1][nr1-1])-2*Vtot_at[nlm1][nr1]/r1*dr1
+       # every *r1 -> /r1 and *r1^2 -> 1 because v is multiplied by r^2
+       B_and_C_r+=Vtot_at[nlm1][nr1]*np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1]*dr1  /r1 #*r**2
+       A_r+= dv1dr *np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1] #*r**2
+       B_and_C_r2+=Vtot_at[nlm1][nr1]*np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1][::-1]*dr1 /r1 #*r**2
+       A_r2+= dv1dr *np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1][::-1]#*r**2
+       '''
+       #if V not devided 
+       dv1dr=(Vtot_at[nlm1][nr1]-Vtot_at[nlm1][nr1-1]-Vtot_at[nlm1][nr1]*dr1)*r1
+       # every *r1 -> /r1 and *r1^2 -> 1 because v is multiplied by r^2
+       B_and_C_r+=Vtot_at[nlm1][nr1]*np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1]*dr1   #*r
+       A_r+= dv1dr *np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1] #*r*
+       B_and_C_r2+=Vtot_at[nlm1][nr1]*np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1][::-1]*dr1 #*r
+       A_r2+= dv1dr *np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1][::-1]#*r
+      return B_and_C_r,A_r,B_and_C_r2,A_r2
+
+print(max([max(i) for i in ENE_weights]))
+def k_integral(ALMBLM_at,ENE_weights,l5,m5,l4,m4,n_k_total):
+         I_kp,I2_kp=np.array([0.j,0.j]),np.array([0.j,0.j])
+         for kp in range(len(ALMBLM_at)):
+            for iband in range(len(ALMBLM_at[kp])):
+#             for jband in range(n_band):
+              I_kp+=ENE_weights[kp][iband]*np.conjugate(ALMBLM_at[kp][iband][l5][m5+l5])*ALMBLM_at[kp][iband][l4][m4+l4]
+              I2_kp+=ENE_weights[kp][iband]*np.conjugate(ALMBLM_at[kp][iband][l5][m5+l5])*ALMBLM_at[kp][iband][l4][m4+l4][::-1]  
+         return I_kp/n_k_total,I2_kp/n_k_total
+
+def Hopfield(args):
+  [at,nlm1,dr,LM,RMESH,Vtot,RADWF,ALMBLM,n_k_total]=args
+#def Hopfield(at,nlm1,dr,LM,RMESH,Vtot,RADWF,ALMBLM):
+#  brrr=[0,0,0,0,0,0]
+  print (at,nlm1,LM[at])
+  Hopfield,Hopfield2=0.j,0.j
+  do_b=0
   [l1,m1]=LM[at][nlm1]
   if m1==0: 
    Bx=0.
    do_b=0
   else: do_b=1
-  for nlm2 in range(1,len(LM[at])):
+  for nlm2 in range(len(LM[at])):
    [l2,m2]=LM[at][nlm2]
+   print (l1,': ',l2,Hopfield,Hopfield2)
    if m2==0: 
     Bx=0.
     do_b=0
    else: do_b=1
-   for l3 in range(6):#len(LM[at])):
+   for l3 in range(n_l):#len(LM[at])):
     for m3 in range(-l3,l3+1):#len(LM[at])):
-     for l4 in range(6):#len(LM[at])):
-      print l1,l2,l3,l4,Hopfield,Hopfield2
+     for l4 in range(n_l):#len(LM[at])):
+      B_and_C_r,A_r,B_and_C_r2,A_r2=r_integral(RMESH[at],RADWF[at],Vtot[at],dr[at],l3,l4,nlm1)
       for m4 in range(-l4,l4+1):#len(LM[at])):
-
-       if m4==m3-m1:  
-        Ax1=three_y(l1,m1,l4,m4,l3,m3)
-        if do_b: Bx1=spec_int(l1,m1,l3,m3,l4,m4)
-       else: 
-        continue
-
-       B_and_C_r,A_r=np.array([0.j,0.j]),np.array([0.j,0.j])
-       B_and_C_r2,A_r2=np.array([0.j,0.j]),np.array([0.j,0.j])
-       for nr1,r1 in enumerate(RMESH[at]):   
-        dv1dr=Vtot[at][nlm1][nr1]-Vtot[at][nlm1][nr1-1]
-        dr1=dr[at][nr1]
-        B_and_C_r+=r1*Vtot[at][nlm1][nr1]*np.conjugate(RADWF[at][l3][nr1])*RADWF[at][l4][nr1]*dr1
-        A_r+=r1**2. * dv1dr *np.conjugate(RADWF[at][l3][nr1])*RADWF[at][l4][nr1]
-        B_and_C_r2+=r1*Vtot[at][nlm1][nr1]*np.conjugate(RADWF[at][l3][nr1])*RADWF[at][l4][nr1][::-1]*dr1
-        A_r2+=r1**2. * dv1dr *np.conjugate(RADWF[at][l3][nr1])*RADWF[at][l4][nr1][::-1]      
-       #wsp=np.conjugate(ALMBLM[k][at][iband][l3][m3])*ALMBLM[kp][at][jband][l4][m4]
-       #B_and_C_r *=wsp
-       #A_r *=wsp
-
-       for l5 in range(6):#len(LM[at])):
+       if m4!=m3-m1: 
+        continue 
+       Ax1=three_y(l1,m1,l4,m4,l3,m3)
+       if do_b: Bx1=spec_int(l1,m1,l3,m3,l4,m4)
+       for l5 in range(n_l):#len(LM[at])):
         for m5 in range(-l5,l5+1):#len(LM[at])):
-
-         I_kp,I2_kp=np.array([0.j,0.j]),np.array([0.j,0.j])
-         for kp in range(len(ALMBLM)):
-            for iband in range(len(ALMBLM[kp])):
-#             for jband in range(n_band):
-              I_kp+=ENE_weights[kp][iband]*np.conjugate(ALMBLM[kp][at][iband][l5][m5+l5])*ALMBLM[kp][at][iband][l4][m4+l4]
-              I2_kp+=ENE_weights[kp][iband]*np.conjugate(ALMBLM[kp][at][iband][l5][m5+l5])*ALMBLM[kp][at][iband][l4][m4+l4][::-1]  
-
-
-         for l6 in range(6):#len(LM[at])):
+         I_kp,I2_kp=k_integral(ALMBLM[at],ENE_weights,l5,m5,l4,m4,n_k_total)
+         for l6 in range(n_l):#len(LM[at])):
+          B_and_C_rp,A_rp,B_and_C_rp2,A_rp2=r_integral(RMESH[at],RADWF[at],Vtot[at],dr[at],l5,l6,nlm2)
           for m6 in range(-l6,l6+1):#len(LM[at])):
-
-           if m6==m5-m2:  
-            Ax=Ax1*three_y(l2,m2,l6,m6,l5,m5)
-	    if do_b: Bx=Bx1*spec_int(l2,m2,l5,m5,l6,m6)
-            Cx=-m1*m2*Ax 
-           else: 
-             continue
-
-	   B_and_C_rp,A_rp=np.array([0.j,0.j]),np.array([0.j,0.j])
-	   B_and_C_rp2,A_rp2=np.array([0.j,0.j]),np.array([0.j,0.j])
-           for nr1,r1 in enumerate(RMESH[at]):
-            dv1dr=Vtot[at][nlm2][nr1]-Vtot[at][nlm2][nr1-1]
-            dr1=dr[at][nr1]
-            B_and_C_rp+=r1*Vtot[at][nlm2][nr1]*np.conjugate(RADWF[at][l5][nr1])*RADWF[at][l6][nr1]*dr1
-            A_rp+=r1**2. * dv1dr *np.conjugate(RADWF[at][l5][nr1])*RADWF[at][l6][nr1]
-            B_and_C_rp2+=r1*Vtot[at][nlm2][nr1]*np.conjugate(RADWF[at][l5][nr1])*RADWF[at][l6][nr1][::-1]*dr1
-            A_rp2+=r1**2. * dv1dr *np.conjugate(RADWF[at][l5][nr1])*RADWF[at][l6][nr1][::-1]
-	    
-	   I_k,I2_k=np.array([0.j,0.j]),np.array([0.j,0.j])
-           for k in range(len(ALMBLM)):
-            for iband in range(len(ALMBLM[k])):
-#             for jband in range(n_band):
-              I_k +=ENE_weights[k][iband]*np.conjugate(ALMBLM[k][at][iband][l3][m3+l3])*ALMBLM[k][at][iband][l6][m6+l6]
-              I2_k+=ENE_weights[k][iband]*np.conjugate(ALMBLM[k][at][iband][l3][m3+l3])*ALMBLM[k][at][iband][l6][m6+l6][::-1]
-
+           if m6!=m5-m2:  
+            continue
+           Ax=Ax1*three_y(l2,m2,l6,m6,l5,m5)
+           if do_b: Bx=Bx1*spec_int(l2,m2,l5,m5,l6,m6)
+           Cx=-m1*m2*Ax 
+           I_k,I2_k=k_integral(ALMBLM[at],ENE_weights,l3,m3,l6,m6,n_k_total)
+ #          print( round_complex(I_k[0],0), round_complex(B_and_C_r[0],0), round_complex(A_r[0],0), round(Bx,0), round(Ax,0))
            Hopfield+=np.dot(B_and_C_r*B_and_C_rp*(Bx+Cx)+A_r*A_rp*Ax, I_k*I_kp)
            Hopfield2+=np.dot(B_and_C_r2*B_and_C_rp2*(Bx+Cx)+A_r2*A_rp2*Ax, I2_k*I2_kp)
-
-
+ #          brrr1=[br.real for br in [B_and_C_r[0],Bx,A_r[0],Ax,I_k[0],I_kp[0]]]
+ #          brrr=[max(brrr1[br],brrr[br]) for br in range(6)]
+ #     print(l1,l2,':', Hopfield,brrr)
+  print('finally: ',at,nlm1,(Hopfield),(Hopfield2))
+  print('finally: ',at,nlm1,round_complex(Hopfield,5),round_complex(Hopfield2,5))
+  return Hopfield
 #ENE[i][j] i-kpoint, j- band
-#RADWF[h][i][j][k][0-1] h-kpoint, i-atoms, j- l (orbital No), k - r-mesh, [0]-radwf, [1]-udot
-#ALMBLM[k][i][j][l][m][0-3] k-kpoint, i-atoms, j-band, l (orbital No), m, [0: Re[Alm]+j*Im[Alm], 1:  Re[Blm]+j*Im[Blm]]
+#RADWF[i][j][k][0-1] i-atoms, j- l (orbital No), k - r-mesh, [0-1]-large  component of radwf and udot
+#ALMBLM[i][k][j][l][m][0-3]  i-atoms,k-kpoint, j-band, l (orbital No), m, [0: Re[Alm]+j*Im[Alm], 1:  Re[Blm]+j*Im[Blm]]
+
+
+print('Calculate eta...')
+no_of_pool=sum([len(LM[at]) for at in range(n_at)])
+print ('No of pools:',no_of_pool)
+if __name__ == '__main__':
+ with Pool(no_of_pool) as pol:
+  result=pol.map(Hopfield,[[at,nlm1,dr,LM,RMESH,Vtot,RADWF,ALMBLM,n_k_total] for at in range(n_at) for nlm1 in range(len(LM[at])) ])
+  print(sum(result),' total Hopfield: ',sum(result)/dos*Ry_to_eV/ab_to_ang/ab_to_ang)
+
+'''
+if __name__ == '__main__':
+ pool = Pool()
+ results = [pool.apply(Hopfield, args=(at,nlm1,dr,LM,RMESH,Vtot,RADWF,ALMBLM))  for at in range(n_at) for nlm1 in range(len(LM[at]))]
+ pool.close()
+'''
+'''
+   processes = []
+   for at in range(n_at):
+     for nlm1 in range(len(LM[at])):
+        p = Process(target=Hopfield, args=(at,nlm1,dr,LM,RMESH,Vtot,RADWF,ALMBLM,))
+        processes.append(p)
+        p.start()        
+   for process in processes:
+        process.join()
+'''
 
 
