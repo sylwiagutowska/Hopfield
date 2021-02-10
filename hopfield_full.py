@@ -12,6 +12,11 @@ degauss=0.05
 prefix=os.getcwd().split('/')[-1]
 print(prefix)
 
+SOC=0
+CIN=4e-22
+if os.stat("DOS/DOS.inso").st_size != 0:  
+ CIN=1./(137.0359895*2) #for treating big and small component of wave function
+ SOC=1
 #############FOR Nb eta=7.627eV/ang^2 [papaconsta.. 2002] or 4.7 eV/ang^2 (allen-dynes)
 ##mathematica SphericalHarmonicy(l,m,theta,phi). theta in [0,pi), phi in [0,2pi]
 ##scipy scipy.special.sph_harm(m, l, theta, phi) , theta in [0,2pi], phi in [0,pi]
@@ -79,11 +84,9 @@ ab_to_ang=0.529177210903
 pi=3.141592653589793238462643
 #Na=6.02214076e23
 
-SOC=0
-if SOC==1: CIN=1./137.0359895**2 #for treating big and small component of wave function
-else: CIN=4.0*1e-22
 
 
+'''
 print('Reading EF and Volume...'),
 os.system('grep ":FER " DOS/DOS.scf |head -n 1 >>hopfield_tmp')
 os.system('grep ":VOL " '+prefix+'.scf0 |head -n 1 >>hopfield_tmp')
@@ -104,9 +107,9 @@ h.close()
 os.system('rm hopfield_tmp')
 Z_of_atoms=[float(i.split()[-1]) for i in tmp]
 print(Z_of_atoms)
+'''
 
-
-print('Read total potential...')
+print('Read intrasitial total potential...')
 h=open('vtotal/vtotal.vtotal')
 tmp=h.readlines()
 h.close()
@@ -129,6 +132,21 @@ for i in tmp:
 n_at=len(Vtot) #number of atoms
 nr=len(Vtot[0][0]) #number of r-points
 print (n_at,nr, LM)
+'''
+V_inter=[]
+K_inter=[]
+print('Read intersitial total potential...')
+for ni,i in enumerate(tmp):
+ if 'TOTAL POTENTIAL IN INTERSITIAL' in i:
+  n_K_intersitial=tmp[ni+2].split()[0]
+  tmp=tmp[ni+3:n_K_intersitial+3]
+  break
+for i in tmp:
+ ii=i.replace('-',' -').split()
+ K_inter.append([int(m) for m in ii[:3]])
+ V_inter.append(complex(float(ii[3]),float(ii[4])))
+
+'''
 
 
 print('Reading radial wave funtions...')
@@ -144,11 +162,13 @@ for i in tmp:
   RADWF.append([])
   RADWFsmall.append([])
   mesh_info.append([float(m) for m in i.split()])
- elif len(i.split())==1: RADWF[-1].append([])
+ elif len(i.split())==1: 
+  RADWF[-1].append([])
+  RADWFsmall[-1].append([])
  else:
   try: 
    RADWF[-1][-1].append(np.array([float(i.split()[0]),float(i.split()[2])]))
-   RADWFsmall[-1][-1].append(np.array([float(i.split()[1]),float(i.split()[3])]))
+   RADWFsmall[-1][-1].append(np.array([CIN*float(i.split()[1]),CIN*float(i.split()[3])]))
   except:continue
 n_l=min([ len(i) for i in RADWF])
 
@@ -180,7 +200,8 @@ Vtot=[ [[Vtot[i][j][k]/(RMESH[i][k]) for k in range(len(Vtot[i][j]))] for j in r
 
 #RADWF[i][j][k][0-1] i-atoms, j- l (orbital No), k - r-mesh, [0-1]-large  component of radwf and udot
 #oryginalnie w pliku *radwf jest zapisany radwf*R, wiec dzielimy przez R by dostac czysty radwf
-RADWF=[ [[[RADWF[i][j][k][m]/(RMESH[i][k]) for m in range(2)] for k in range(len(RADWF[i][j]))] for j in range(len(RADWF[i]))] for i in range(len(RADWF))]   
+RADWF=[ [[[RADWF[i][j][k][0]/(RMESH[i][k]),RADWF[i][j][k][1] ] for k in range(len(RADWF[i][j]))] for j in range(len(RADWF[i]))] for i in range(len(RADWF))]   
+RADWFsmall=[ [[[RADWFsmall[i][j][k][0]/(RMESH[i][k]),RADWFsmall[i][j][k][1] ] for k in range(len(RADWFsmall[i][j]))] for j in range(len(RADWFsmall[i]))] for i in range(len(RADWFsmall))]   
 
 print('Write spherical V and radwf to files V_i.dat and RADWF_i.dat...')
 for i in range(len(Vtot)):
@@ -203,6 +224,18 @@ for i in range(len(RADWF)):
    h.write(str(RADWF[i][j][k][0])+' '+str(RADWF[i][j][k][1])+' ')
   h.write('\n')
  h.close() 
+
+for i in range(len(RADWFsmall)):
+ print('aa')
+ h=open('RADWFsmall_'+str(i)+'.dat','w')
+ h.write('# r , l=0- big component,small component, l=1- big component,small component....\n')
+ for k in range(len(RADWFsmall[i][1])):
+  h.write(str(RMESH[i][k])+' ')
+  for j in range(len(RADWFsmall[i])):
+   h.write(str(RADWFsmall[i][j][k][0])+' '+str(RADWFsmall[i][j][k][1])+' ')
+  h.write('\n')
+ h.close() 
+
 
 
 print('Read EF and total DOS...'),
@@ -311,16 +344,27 @@ for k in range(n_k):
 
 
 print(" No of noneq kpoints="+str(n_k))
- 
+'''
+print('Calculate intersitial part of Hopfield...'):
+for K1 in range(n_K_intersitial):
+ for K2 in range(n_K_intersitial):
+   for
 
+'''
+
+
+print ('Calculate intrasitial part of Hopfield...')
 #Vtot=[] #[atom][lm][r]
 #LM=[] #[atom][list of lm 
-#n_l=6
+
+#n_l nieograniczone daje dokladnie te same wyniki co n_l=5; n_l=4 zmienia wynik o 0.01%
+n_l=3
+
 dr=[[0]+[ RMESH[at][i]-RMESH[at][i-1] for i in range(1,nr)] for at in range(n_at)]  
 
 def r_integral(RMESH_at,RADWF_at,Vtot_at,dr_at,l3,l4,nlm1):
-      B_and_C_r,A_r=np.array([0.j,0.j]),np.array([0.j,0.j])
-      B_and_C_r2,A_r2=np.array([0.j,0.j]),np.array([0.j,0.j])
+      Ba_and_C_r,Aa_r=np.array([0.j,0.j]),np.array([0.j,0.j])
+      Ba_and_C_r2,Aa_r2=np.array([0.j,0.j]),np.array([0.j,0.j])
       for nr1,r1 in enumerate(RMESH_at): 
        if nr1==0: continue  
        dr1=dr_at[nr1]
@@ -341,24 +385,25 @@ def r_integral(RMESH_at,RADWF_at,Vtot_at,dr_at,l3,l4,nlm1):
        B_and_C_r2+=Vtot_at[nlm1][nr1]*np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1][::-1]*dr1 /r1 #*r**2
        A_r2+= dv1dr *np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1][::-1]#*r**2
        '''
-       #if V not devided 
+       #if Vr^2 devided by r (so we have V*r)
        dv1dr=(Vtot_at[nlm1][nr1]-Vtot_at[nlm1][nr1-1]-Vtot_at[nlm1][nr1]*dr1)*r1
        # every *r1 -> /r1 and *r1^2 -> 1 because v is multiplied by r^2
-       B_and_C_r+=Vtot_at[nlm1][nr1]*np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1]*dr1   #*r
-       A_r+= dv1dr *np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1] #*r*
-       B_and_C_r2+=Vtot_at[nlm1][nr1]*np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1][::-1]*dr1 #*r
-       A_r2+= dv1dr *np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1][::-1]#*r
-      return B_and_C_r,A_r,B_and_C_r2,A_r2
+       Ba_and_C_r+=Vtot_at[nlm1][nr1]*np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1]*dr1   #*r
+       Aa_r+= dv1dr *np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1] #*r*
+       Ba_and_C_r2+=Vtot_at[nlm1][nr1]*np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1][::-1]*dr1 #*r
+       Aa_r2+= dv1dr *np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1][::-1]#*r
+      return Ba_and_C_r,Aa_r,Ba_and_C_r2,Aa_r2
 
 print(max([max(i) for i in ENE_weights]))
 def k_integral(ALMBLM_at,ENE_weights,l5,m5,l4,m4,n_k_total):
-         I_kp,I2_kp=np.array([0.j,0.j]),np.array([0.j,0.j])
+         Ia_kp,I2a_kp=np.array([0.j,0.j]),np.array([0.j,0.j])
          for kp in range(len(ALMBLM_at)):
             for iband in range(len(ALMBLM_at[kp])):
 #             for jband in range(n_band):
-              I_kp+=ENE_weights[kp][iband]*np.conjugate(ALMBLM_at[kp][iband][l5][m5+l5])*ALMBLM_at[kp][iband][l4][m4+l4]
-              I2_kp+=ENE_weights[kp][iband]*np.conjugate(ALMBLM_at[kp][iband][l5][m5+l5])*ALMBLM_at[kp][iband][l4][m4+l4][::-1]  
-         return I_kp/n_k_total,I2_kp/n_k_total
+              Ia_kp+=ENE_weights[kp][iband]*np.conjugate(ALMBLM_at[kp][iband][l5][m5+l5])*ALMBLM_at[kp][iband][l4][m4+l4]
+              I2a_kp+=ENE_weights[kp][iband]*np.conjugate(ALMBLM_at[kp][iband][l5][m5+l5])*ALMBLM_at[kp][iband][l4][m4+l4][::-1]  
+         return Ia_kp/n_k_total,I2a_kp/n_k_total
+
 
 def Hopfield(args):
   [at,nlm1,dr,LM,RMESH,Vtot,RADWF,ALMBLM,n_k_total]=args
@@ -366,6 +411,8 @@ def Hopfield(args):
 #  brrr=[0,0,0,0,0,0]
   print (at,nlm1,LM[at])
   Hopfield,Hopfield2=0.j,0.j
+  HopfieldS,Hopfield2S=0.j,0.j #with SOC
+  B_and_C_rpS,A_rpS,B_and_C_rp2S,A_rp2S,B_and_C_rS,A_rS,B_and_C_r2S,A_r2S=0.j,0.j,0.j,0.j,0.j,0.j,0.j,0.j
   do_b=0
   [l1,m1]=LM[at][nlm1]
   if m1==0: 
@@ -383,6 +430,8 @@ def Hopfield(args):
     for m3 in range(-l3,l3+1):#len(LM[at])):
      for l4 in range(n_l):#len(LM[at])):
       B_and_C_r,A_r,B_and_C_r2,A_r2=r_integral(RMESH[at],RADWF[at],Vtot[at],dr[at],l3,l4,nlm1)
+      if SOC==1:
+       B_and_C_rS,A_rS,B_and_C_r2S,A_r2S=r_integral(RMESH[at],RADWFsmall[at],Vtot[at],dr[at],l3,l4,nlm1)
       for m4 in range(-l4,l4+1):#len(LM[at])):
        if m4!=m3-m1: 
         continue 
@@ -393,6 +442,8 @@ def Hopfield(args):
          I_kp,I2_kp=k_integral(ALMBLM[at],ENE_weights,l5,m5,l4,m4,n_k_total)
          for l6 in range(n_l):#len(LM[at])):
           B_and_C_rp,A_rp,B_and_C_rp2,A_rp2=r_integral(RMESH[at],RADWF[at],Vtot[at],dr[at],l5,l6,nlm2)
+          if SOC==1:
+           B_and_C_rpS,A_rpS,B_and_C_rp2S,A_rp2S=r_integral(RMESH[at],RADWFsmall[at],Vtot[at],dr[at],l5,l6,nlm2)
           for m6 in range(-l6,l6+1):#len(LM[at])):
            if m6!=m5-m2:  
             continue
@@ -403,12 +454,14 @@ def Hopfield(args):
  #          print( round_complex(I_k[0],0), round_complex(B_and_C_r[0],0), round_complex(A_r[0],0), round(Bx,0), round(Ax,0))
            Hopfield+=np.dot(B_and_C_r*B_and_C_rp*(Bx+Cx)+A_r*A_rp*Ax, I_k*I_kp)
            Hopfield2+=np.dot(B_and_C_r2*B_and_C_rp2*(Bx+Cx)+A_r2*A_rp2*Ax, I2_k*I2_kp)
+           HopfieldS+=np.dot(B_and_C_rS*B_and_C_rpS*(Bx+Cx)+A_rS*A_rpS*Ax, I_k*I_kp)
+           Hopfield2S+=np.dot(B_and_C_r2S*B_and_C_rp2S*(Bx+Cx)+A_r2S*A_rp2S*Ax, I2_k*I2_kp)
  #          brrr1=[br.real for br in [B_and_C_r[0],Bx,A_r[0],Ax,I_k[0],I_kp[0]]]
  #          brrr=[max(brrr1[br],brrr[br]) for br in range(6)]
  #     print(l1,l2,':', Hopfield,brrr)
   print('finally: ',at,nlm1,(Hopfield),(Hopfield2))
   print('finally: ',at,nlm1,round_complex(Hopfield,5),round_complex(Hopfield2,5))
-  return Hopfield
+  return Hopfield,Hopfield2,HopfieldS,Hopfield2S
 #ENE[i][j] i-kpoint, j- band
 #RADWF[i][j][k][0-1] i-atoms, j- l (orbital No), k - r-mesh, [0-1]-large  component of radwf and udot
 #ALMBLM[i][k][j][l][m][0-3]  i-atoms,k-kpoint, j-band, l (orbital No), m, [0: Re[Alm]+j*Im[Alm], 1:  Re[Blm]+j*Im[Blm]]
@@ -420,7 +473,15 @@ print ('No of pools:',no_of_pool)
 if __name__ == '__main__':
  with Pool(no_of_pool) as pol:
   result=pol.map(Hopfield,[[at,nlm1,dr,LM,RMESH,Vtot,RADWF,ALMBLM,n_k_total] for at in range(n_at) for nlm1 in range(len(LM[at])) ])
-  print(sum(result),' total Hopfield: ',sum(result)/dos*Ry_to_eV/ab_to_ang/ab_to_ang)
+  print('Hopfield, Hopfield udot, Hopfield SOC, Hopfield udot SOC:')
+  for i in range(4): print(sum([m[i] for m in result])),
+  print('')
+  print('the same times dos*rytoev/abtoang^2')
+  for i in range(4): print(sum([m[i]/dos*Ry_to_eV/ab_to_ang/ab_to_ang for m in result])),
+  print('Total hopfield'),
+  print(sum([sum(i) for i in result]))
+  print('Total hopfield times dos*rytoev/abtoang^2'),
+  print(sum([sum(i) for i in result])/dos*Ry_to_eV/ab_to_ang/ab_to_ang)
 
 '''
 if __name__ == '__main__':
@@ -439,4 +500,45 @@ if __name__ == '__main__':
         process.join()
 '''
 
+'''
+Ciekawostka: w wien2k (lapw5) harmoniki sferyczne sa produkowane iteracyjnie
+        Start:
+!                        +------+
+!                        |   1
+!           Y(0,0) =  -+ | -----
+!                       \| 4(Pi)
+!
+!                                   +------+
+!                                   |   3
+!           Y(1,0) =  cos(Theta) -+ | -----
+!                                  \| 4(Pi)
+!
+!                                     +------+
+!                                     |   3    i(Phi)
+!           Y(1,1) =  - sin(Theta) -+ | ----- e
+!                                    \| 8(Pi)
+!
+!        Formula 1:
+!
+!           Y(l,l) =
+!                           +--------+
+!                           | (2l+1)   i(Phi)
+!            -sin(Theta) -+ | ------  e       Y(l-1,l-1)
+!                          \|   2l
+!
+!        Formula 2:
+!                                  +---------------+
+!                                  |  (2l-1)(2l+1)
+!           Y(l,m) = cos(Theta) -+ | -------------- Y(l-1,m)  -
+!                                 \|   (l-m)(l+m)
+!
+!                                    +--------------------+
+!                                    |(l-1+m)(l-1-m)(2l+1)
+!                              -  -+ |-------------------- Y(l-2,m)
+!                                   \|  (2l-3)(l-m)(l+m)
+!
 
+oraz z wykorzystaiem wlasnosci
+!                                          m	  *
+!                            Y(l,-m) = (-1) Y(l,m)
+'''
