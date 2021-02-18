@@ -52,7 +52,7 @@ h=open(prefix+'.vsp','r') #stored as V*r
 tmp=h.readlines()
 h.close()
 
-V=[] # V[i][j][k] i-th atm, j-th r-point
+V=[] # V[i][j] i-th atm, j-th r-point
 for i in tmp:
   if 'ATOMNUMBER' in i:
    V.append([])
@@ -75,13 +75,13 @@ na=len(V) #number of atoms
 nr=len(V[0]) #number of r-points
 ###devide V by Q
 ###and multiply by 2 to obtain Hartree -> Ry
-V=[ [V[i][j]/Z_of_atoms[i]*2 for j in range(len(V[i]))] for i in  range(len(V))]   
+#V=[ [V[i][j]/Z_of_atoms[i]*2 for j in range(len(V[i]))] for i in  range(len(V))]   
 print('Reading radial wave funtions...')
 h=open('RADWF/RADWF.radwf','r')
 tmp=h.readlines()
 h.close()
 
-RADWF=[]   #RADWF[h][i][j][k][0/1] h-kpoint, i-atoms, j- l (orbital No), k - r-mesh, [0/1]-large or small component
+RADWF=[]   #RADWF[i][j][k][0/1] h-kpoint, i-atoms, j- l (orbital No), k - r-mesh, [0/1]-large or small component
 mesh_info=[]
 for i in tmp:
  if str(nr) in i.split(): 
@@ -122,6 +122,8 @@ for i in range(len(RADWF)):
 
 #oryginalnie w pliku *vsp jest zapisany V*R, wiec dzielimy przez R by dostac czysty V
 #V=[ [V[i][j]*RMESH[i][j]*(4*pi)**0.5 for j in range(len(V[i]))] for i in range(len(V))]   
+RADWF=[[[[m/RMESH[i][k]**0.5 for m in RADWF[i][j][k]] for k in range(len(RADWF[i][j]))] for j in range(len(RADWF[i]))] for i in range(len(RADWF))]  
+
 
 print('Write to files V_i.dat and RADWF_i.dat...')
 for i in range(len(V)):
@@ -145,15 +147,8 @@ for i in range(len(RADWF_1)):
   h.write('\n')
  h.close() 
 
-
+'''
 print('Read k-mesh...')
-'''
-h=open('DOS/DOS.klist')
-tmp=h.readlines()
-h.close()
-NONEQ=[ [int(m) for m in i.split()[1:4]] for i in tmp if len(i.split())>3]
-print("klist: no_of noneq="+str(len(NONEQ)))
-'''
 
 h=open('DOS/DOS.outputkgen')
 tmp=h.readlines()
@@ -257,7 +252,7 @@ print np.transpose(tetra)[100:110]
 
 [DOS,DOS_l] = hopfield_tetra.dos_t(etetra,wtetra,len(ENE),len(tetra[0]),EF,len(ALM[0]))
 print 'DOS',(DOS),DOS_l,sum(DOS_l)
-
+'''
 
 
 print('Read lDOS...')
@@ -301,36 +296,41 @@ print('Calculate eta...')
 atomic_eta=[]
 for i in range(na):
  eta_i=0
-# for l in range(len(LDOS[i][2:])-1):
-#   eta_l0=(2.*l+2.)/(2.*l+1)/(2.*l+3)*LDOS[i][l+2]*LDOS[i][l+3]/sum_ldos /2/2*2 #doses per spin
- for l in range(len(DOS_l)-1):
-   eta_l0=(2.*l+2.)/(2.*l+1)/(2.*l+3)*DOS_l[l]*DOS_l[l+1]/sum(DOS_l)
+ for l in range(len(LDOS[i][2:])-1):
+   eta_l0=(2.*l+2.)/(2.*l+1)/(2.*l+3)*LDOS[i][l+2]*LDOS[i][l+3]/sum_ldos /2/2*2 #doses per spin
+# for l in range(len(DOS_l)-1):
+#   eta_l0=(2.*l+2.)/(2.*l+1)/(2.*l+3)*DOS_l[l]*DOS_l[l+1]/sum(DOS_l)
    ###radial integral in def of eta
    integral=0 #[0,0]
-   m=0
    for ri in range(1,len(RMESH[i])):
-    dr=RMESH[i][ri]-RMESH[i][ri-1-m]
- #   if dr<1e-3: 
- #    m=m+1
- #    continue
-    dVdr=(V[i][ri]-V[i][ri-1]) #/dr #do not devide here by dr, because then the integral is multiplied by dr, so dr is cancelled out  
-#    dVdr=((V[i][ri]-V[i][ri-1-m])*RMESH[i][ri]\
-#          -V[i][ri]*dr)/(RMESH[i][ri]*RMESH[i][ri])    
-#    if dr>1e-3:
-#     dVdr=(((V[i][ri][0]*RMESH[i][ri])-(V[i][ri-1-m][0]*RMESH[i][ri-1-m]))\
- #         -2.*V[i][ri][0]*dr)/(RMESH[i][ri]*RMESH[i][ri])
- #   else:
- #    dVdr=((V[i][ri][0]-V[i][ri-1-m][0])*RMESH[i][ri]\
- #         -2.*V[i][ri][0]*dr)/(RMESH[i][ri]*RMESH[i][ri])     
+    dr=RMESH[i][ri]-RMESH[i][ri-1]
+    dVdr=(V[i][ri]-V[i][ri-1])-V[i][ri]*dr
     inti=      (RADWF[i][l][ri  ][0]*dVdr*RADWF[i][l+1][ri  ][0]+\
-           CIN*(RADWF[i][l][ri  ][1]*dVdr*RADWF[i][l+1][ri  ][1])) 
+           CIN*(RADWF[i][l][ri  ][1]*dVdr*RADWF[i][l+1][ri  ][1]))  
     integral=integral+(inti) #*dr
-    m=0
    eta_l=eta_l0*integral*integral
    print integral,eta_l0, eta_l
    eta_i=eta_i+eta_l           
  atomic_eta.append(eta_i)
 
+'''
+#ten sam wynik
+   for ri in range(1,len(RMESH[i])):
+    dr=RMESH[i][ri]-RMESH[i][ri-1]
+    dVdr=(V[i][ri]-V[i][ri-1])-V[i][ri]*dr
+    for rip in range(1,len(RMESH[i])):  
+     drp=RMESH[i][rip]-RMESH[i][rip-1]
+     dVdrp=(V[i][rip]-V[i][rip-1])-V[i][rip]*drp
+     inti=      (RADWF[i][l][ri  ][0]*dVdr*RADWF[i][l+1][ri  ][0]+\
+           CIN*(RADWF[i][l][ri  ][1]*dVdr*RADWF[i][l+1][ri  ][1])) *\
+                (RADWF[i][l][rip ][0]*dVdrp*RADWF[i][l+1][rip ][0]+\
+           CIN*(RADWF[i][l][rip ][1]*dVdrp*RADWF[i][l+1][rip ][1])) 
+     integral=integral+(inti) #*dr
+   eta_l=eta_l0*integral #*integral
+   print integral,eta_l0, eta_l
+   eta_i=eta_i+eta_l           
+ atomic_eta.append(eta_i)
+'''
 '''
 #calka przeksztalcona by nie robic pochodnej V
 print('Calculate eta...')
@@ -371,7 +371,7 @@ for i in range(na):
 print('atomic eta:'),
 print(atomic_eta)
 eta=sum(atomic_eta) #j/m^2
-eta=eta*Ry_to_eV/(ab_to_ang**2) #ev/A^2
+eta=eta*Ry_to_eV/(ab_to_ang**2) #/((4./3*3.14*rmt**3)**2)/4*pi*4*pi #ev/A^2
 print ('eta=',eta,'eV/A^2')
  
    

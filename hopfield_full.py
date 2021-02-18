@@ -55,9 +55,12 @@ def ynim(m,l,tet,fi):
 
 def spec_int(l1,m1,l2,m2,l3,m3):
 # if m1==0: return 0.
- out1=quad(lambda tet: np.real(sph_harm(m1,l1,0,tet)*np.conj(sph_harm(m2,l2,0,tet))*sph_harm(m3,l3,0,tet)), 0.0, np.pi)
- out2=quad(lambda tet: np.imag(sph_harm(m1,l1,0,tet)*np.conj(sph_harm(m2,l2,0,tet))*sph_harm(m3,l3,0,tet)), 0.0, np.pi)
- return 2*np.pi*m1*complex(-round(out2[0],6),round(out1[0],6)) #calka*2*pi*m*i
+ out1=quad(lambda tet: np.real(sph_harm(m1,l1,0,tet)*np.conj(sph_harm(m2,l2,0,tet))*sph_harm(m3,l3,0,tet)), 0.0, np.pi)[0]
+ out2=quad(lambda tet: np.imag(sph_harm(m1,l1,0,tet)*np.conj(sph_harm(m2,l2,0,tet))*sph_harm(m3,l3,0,tet)), 0.0, np.pi)[0]
+ if np.isnan(out1) or np.isnan(out2): 
+  print('spec_int',l1,m1,l2,m2,l3,m3,':infty')
+  return 0.j
+ return complex(round(out1,6),round(out2,6))
 
 
 ################RADWF is already multiplied by r and Vtotal - by r^2
@@ -154,22 +157,32 @@ h=open('DOS/DOS.radwf','r')
 tmp=h.readlines()
 h.close()
 
-RADWF=[]   #RADWF[i][j][k][0-1] i-atoms, j- l (orbital No), k - r-mesh, [0-1]-large  component of radwf and udot
-RADWFsmall=[] #RADWFsmall[i][j][k][0-1] i-atoms, j- l (orbital No), k - r-mesh, [0-1]-  small component of radwf and udot
+RADWF=[]   #RADWF[i][j][k][0-1] i-atoms, j- l (orbital No), k - r-mesh, [0-2]-large  component of radwf and udot, and lo if exists
+RADWFsmall=[] #RADWFsmall[i][j][k][0-1] i-atoms, j- l (orbital No), k - r-mesh, [0-1]-  small component of radwf and udot, and lo if exists
 mesh_info=[]
+
+if_lo=[]
 for i in tmp:
  if str(nr) in i.split(): 
   RADWF.append([])
   RADWFsmall.append([])
+#  if_lo.append([])
   mesh_info.append([float(m) for m in i.split()])
  elif len(i.split())==1: 
   RADWF[-1].append([])
   RADWFsmall[-1].append([])
+#  if_lo[-1].append(0)
  else:
   try: 
    RADWF[-1][-1].append(np.array([float(i.split()[0]),float(i.split()[2])]))
    RADWFsmall[-1][-1].append(np.array([CIN*float(i.split()[1]),CIN*float(i.split()[3])]))
   except:continue
+ # try: 
+#   if_lo[-1]=1
+#   RADWF[-1][-1][2]=float(i.split()[4])+float(i.split()[6])+float(i.split()[8])
+ #  RADWFsmall[-1][-1][2]=float(i.split()[5])+float(i.split()[7])+float(i.split()[9])
+ # except:continue
+
 n_l=min([ len(i) for i in RADWF])
 
 
@@ -200,8 +213,12 @@ Vtot=[ [[Vtot[i][j][k]/(RMESH[i][k]) for k in range(len(Vtot[i][j]))] for j in r
 
 #RADWF[i][j][k][0-1] i-atoms, j- l (orbital No), k - r-mesh, [0-1]-large  component of radwf and udot
 #oryginalnie w pliku *radwf jest zapisany radwf*R, wiec dzielimy przez R by dostac czysty radwf
-RADWF=[ [[[RADWF[i][j][k][0]/(RMESH[i][k]),RADWF[i][j][k][1] ] for k in range(len(RADWF[i][j]))] for j in range(len(RADWF[i]))] for i in range(len(RADWF))]   
-RADWFsmall=[ [[[RADWFsmall[i][j][k][0]/(RMESH[i][k]),RADWFsmall[i][j][k][1] ] for k in range(len(RADWFsmall[i][j]))] for j in range(len(RADWFsmall[i]))] for i in range(len(RADWFsmall))]   
+for i in range(len(RADWF)):
+ for j in range(len(RADWF[i])):
+  for k in range(len(RADWF[i][j])):
+   RADWF[i][j][k][0]= RADWF[i][j][k][0]/(RMESH[i][k])
+   RADWFsmall[i][j][k][0]= RADWFsmall[i][j][k][0]/(RMESH[i][k])
+
 
 print('Write spherical V and radwf to files V_i.dat and RADWF_i.dat...')
 for i in range(len(Vtot)):
@@ -413,19 +430,26 @@ def Hopfield(args):
   Hopfield,Hopfield2=0.j,0.j
   HopfieldS,Hopfield2S=0.j,0.j #with SOC
   B_and_C_rpS,A_rpS,B_and_C_rp2S,A_rp2S,B_and_C_rS,A_rS,B_and_C_r2S,A_r2S=0.j,0.j,0.j,0.j,0.j,0.j,0.j,0.j
-  do_b=0
+  do_b,do_c=0,0
   [l1,m1]=LM[at][nlm1]
   if m1==0: 
    Bx=0.
    do_b=0
   else: do_b=1
+  if l1==0: 
+   print ('amhere')
+   Cx=0.
+   do_c=0
+  else: do_c=1
   for nlm2 in range(len(LM[at])):
    [l2,m2]=LM[at][nlm2]
    print (l1,': ',l2,Hopfield,Hopfield2)
-   if m2==0: 
+   if  m2==0: 
     Bx=0.
     do_b=0
-   else: do_b=1
+   if l2==0: 
+    Cx=0.
+    do_c=0
    for l3 in range(n_l):#len(LM[at])):
     for m3 in range(-l3,l3+1):#len(LM[at])):
      for l4 in range(n_l):#len(LM[at])):
@@ -436,7 +460,9 @@ def Hopfield(args):
        if m4!=m3-m1: 
         continue 
        Ax1=three_y(l1,m1,l4,m4,l3,m3)
-       if do_b: Bx1=spec_int(l1,m1,l3,m3,l4,m4)
+       if do_c: Cx=4*np.pi**2*(l1*(l1+1)/(((2*l1+1)*(2*l1+3))**0.5)*spec_int(l1+1,m1,l3,m3,l4,m4) \
+         -l1*(l1-1)/(((2*l1-1)*(2*l1+1))**0.5)*spec_int(l1-1,m1,l3,m3,l4,m4))
+       if do_b: Bx1=(-2*np.pi*m1)*spec_int(l1,m1,l3,m3,l4,m4)
        for l5 in range(n_l):#len(LM[at])):
         for m5 in range(-l5,l5+1):#len(LM[at])):
          I_kp,I2_kp=k_integral(ALMBLM[at],ENE_weights,l5,m5,l4,m4,n_k_total)
@@ -448,8 +474,9 @@ def Hopfield(args):
            if m6!=m5-m2:  
             continue
            Ax=Ax1*three_y(l2,m2,l6,m6,l5,m5)
-           if do_b: Bx=Bx1*spec_int(l2,m2,l5,m5,l6,m6)
-           Cx=-m1*m2*Ax 
+           if do_b: Bx=Bx1*(-2*np.pi*m2)*spec_int(l2,m2,l5,m5,l6,m6)
+           if do_c: Cx=Cx*(l2*(l2+1)/(((2*l2+1)*(2*l2+3))**0.5)*spec_int(l2+1,m2,l5,m5,l6,m6) \
+              -l2*(l2-1)/(((2*l2-1)*(2*l2+1))**0.5)*spec_int(l2-1,m2,l5,m5,l6,m6))
            I_k,I2_k=k_integral(ALMBLM[at],ENE_weights,l3,m3,l6,m6,n_k_total)
  #          print( round_complex(I_k[0],0), round_complex(B_and_C_r[0],0), round_complex(A_r[0],0), round(Bx,0), round(Ax,0))
            Hopfield+=np.dot(B_and_C_r*B_and_C_rp*(Bx+Cx)+A_r*A_rp*Ax, I_k*I_kp)
