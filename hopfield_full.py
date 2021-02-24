@@ -133,8 +133,8 @@ for i in tmp:
     Vtot[-1][-1].append(float(m[j*19:(j+1)*19]))
 
 n_at=len(Vtot) #number of atoms
-nr=len(Vtot[0][0]) #number of r-points
-print (n_at,nr, LM)
+n_r=len(Vtot[0][0]) #number of r-points
+print (n_at,n_r, LM)
 '''
 V_inter=[]
 K_inter=[]
@@ -163,7 +163,7 @@ mesh_info=[]
 
 if_lo=[]
 for i in tmp:
- if str(nr) in i.split(): 
+ if str(n_r) in i.split(): 
   RADWF.append([])
   RADWFsmall.append([])
 #  if_lo.append([])
@@ -200,25 +200,29 @@ RMESH=[] #RMESH[i][j] i -atom, j -r-point
 for i in mesh_info:
  [r0,dx,rmt]=i[2:]
  RMESH.append([])
- for j in range(nr):
+ for j in range(n_r):
   RMESH[-1].append(r0*np.exp(j*dx))
  print('RMT='+str(rmt)+' should ='+str(RMESH[-1][-1]))
 
-###devide V by Q
-###and multiply by 2 to obtain Hartree -> Ry
-#oryginalnie w pliku *vtotal jest zapisany V*R^2, wiec dzielimy przez R^2 by dostac czysty V
-#Vtot=[ [[Vtot[i][j][k]/(RMESH[i][k]**2)/Z_of_atoms[i]*2 for k in range(len(Vtot[i][j]))] for j in range(len(Vtot[i]))] for i in range(len(Vtot))]   
-#Vtot=[ [[Vtot[i][j][k]/(RMESH[i][k]**2) for k in range(len(Vtot[i][j]))] for j in range(len(Vtot[i]))] for i in range(len(Vtot))]  
-Vtot=[ [[Vtot[i][j][k]/(RMESH[i][k]) for k in range(len(Vtot[i][j]))] for j in range(len(Vtot[i]))] for i in range(len(Vtot))]  
+RMESH=[ np.array([m for m in i]) for i in RMESH]
+DR=[np.diff(RMESH[at]) for at in range(n_at)] #len=n_r-1 (element 0 is excluded in diff) 
+
+
+#oryginalnie w pliku *vtotal jest zapisany V*R^2, wiec dzielimy przez R by dostac czysty V*R  
+Vtot=[ [np.array([Vtot[i][j][k]/(RMESH[i][k]) for k in range(len(Vtot[i][j]))]) for j in range(len(Vtot[i]))] for i in range(len(Vtot))] 
+DVDR=[ [  (np.gradient(Vtot[at][nlm1])[1:]-Vtot[at][nlm1][1:]*DR[at])*RMESH[at][1:] for nlm1 in range(len(LM[at]))] for at in range(n_at)]
+
 
 #RADWF[i][j][k][0-1] i-atoms, j- l (orbital No), k - r-mesh, [0-1]-large  component of radwf and udot
 #oryginalnie w pliku *radwf jest zapisany radwf*R, wiec dzielimy przez R by dostac czysty radwf
-for i in range(len(RADWF)):
- for j in range(len(RADWF[i])):
-  for k in range(len(RADWF[i][j])):
-   RADWF[i][j][k][0]= RADWF[i][j][k][0]/(RMESH[i][k])
-   RADWFsmall[i][j][k][0]= RADWFsmall[i][j][k][0]/(RMESH[i][k])
+#dodatkowo z RADWF[at][l][r][u,udot] -> RADWF[at][l][u,udot][r]
+RADWFsmall=    [[np.transpose(np.array([ [RADWFsmall[i][j][r][0]/RMESH[i][r],RADWFsmall[i][j][r][1]] for r in range(1,len(RADWF[i][j]))])) for j in range(len(RADWF[i]))] for i in range(len(RADWF))]
+RADWF=         [[np.transpose(np.array([ [RADWF[i][j][r][0]/RMESH[i][r],     RADWF[i][j][r][1]]      for r in range(1,len(RADWF[i][j]))])) for j in range(len(RADWF[i]))] for i in range(len(RADWF))]
 
+
+RMESH=[ i[1:] for i in RMESH]
+Vtot=[ [ Vtot[i][j][1:] for j in range(len(Vtot[i]))] for i in range(len(Vtot))] 
+Vtot_times_dr=[ [Vtot[i][j]*DR[i]  for j in range(len(Vtot[i]))] for i in range(len(Vtot))]
 
 print('Write spherical V and radwf to files V_i.dat and RADWF_i.dat...')
 for i in range(len(Vtot)):
@@ -300,10 +304,20 @@ for i in tmp:
  elif len(i)>10:
   ALMBLM[-1][-1][-1][int(i[0])].append([complex(float(i[3]),float(i[4])),complex(float(i[6]),float(i[7]))]) 
 
-
+n_k=len(ALMBLM)
 #transpose to get: from ALMBLM[kp][at] to ALMBLM[at][kp]
-ALMBLM=[[ALMBLM[i][j] for i in range(len(ALMBLM))] for j in range(n_at)]
+ALMBLM0=[[ALMBLM[i][j] for i in range(len(ALMBLM))] for j in range(n_at)]
 #ALMBLM[i][k][j][l][m][0-3]  i-atoms,k-kpoint, j-band, l (orbital No), m, [0: Re[Alm]+j*Im[Alm], 1:  Re[Blm]+j*Im[Blm]]
+
+
+#n_l nieograniczone daje dokladnie te same wyniki co n_l=5; n_l=4 zmienia wynik o 0.01%
+n_l=4
+
+#alm and blm as numpy arrays
+#ALMBLM[i][k][j][l][m][0-3] -> ALM[i][l][m][k][j]
+ALM=[[[[np.array([ALMBLM0[i][k][j][l][m][0] for j in range(len(ALMBLM0[i][k]))]) for k in range(n_k) ] for m in range(2*l+1) ] for l in range(n_l) ] for i in range(n_at)]
+BLM=[[[[np.array([ALMBLM0[i][k][j][l][m][1] for j in range(len(ALMBLM0[i][k]))]) for k in range(n_k) ] for m in range(2*l+1) ] for l in range(n_l) ] for i in range(n_at)]
+ALMBLM=[[[[np.array([ALMBLM0[i][k][j][l][m] for j in range(len(ALMBLM0[i][k]))]) for k in range(n_k) ] for m in range(2*l+1) ] for l in range(n_l) ] for i in range(n_at)]
 
 
 print('Reading band energies...'),
@@ -334,12 +348,28 @@ for i in tmp:
    ENE[-1].append(i[1])
 #rearrange
 #et[ibnd][tetra[i][nt]]
-print("; No of noneq kpoints="+str(len(ENE))), 
-n_k,n_band=len(kweights),min([ len(i) for i in ENE])
+n_k2,n_band=len(kweights),min([ len(i) for i in ENE])
 n_k_total=sum(kweights)
+print("; No of noneq kpoints="+str(n_k))
+if n_k2!=n_k: raise ValueError('no of k_points of energies:',n_k,' and of almblm:',str(n_k2),' is not the same')
 print("; Total number of kpoints="+str(n_k_total))
+
+print(' From all'+str(max([len(k) for k in ENE]))),
 #choose only energies of  which are considered in *almblm (only (fully or partially) occupied)
-ENE=[ [float(ENE[k][i]) for i in range(len(ALMBLM[0][k]))] for k in range(len(ENE))]
+ENE=[ [float(ENE[k][i]) for i in range(len(ALMBLM0[0][k]))] for k in range(len(ENE))]
+print(' only'+str(max([len(k) for k in ENE]))+' are fully or partially occupied')
+
+print('From all '+str(max([len(k) for k in ENE]))),
+##which bands nearly cross the FS
+who_cross=[]
+for k in range(len(ENE)):
+ for i in range(len(ENE[k])):
+  if i not in who_cross and abs(ENE[k][i]-E_f)<1/13.606: who_cross.append(i)
+minn,maxx=min(who_cross),max(who_cross)   
+for k in range(len(ENE)):
+ ENE[k]=ENE[k][minn:(maxx+1)]
+print(' only '+str(max([len(k) for k in ENE]))+' cross EF or are at least 1 ev close')
+
 #ENE=[ [float(ENE[j][i]) for j in range(len(ENE))] for i in range(n_band)]
 print("; No of bands="+str(len(ENE[0])))
 ENE_weights=[ [] for j in range(n_k)]
@@ -374,132 +404,115 @@ print ('Calculate intrasitial part of Hopfield...')
 #Vtot=[] #[atom][lm][r]
 #LM=[] #[atom][list of lm 
 
-#n_l nieograniczone daje dokladnie te same wyniki co n_l=5; n_l=4 zmienia wynik o 0.01%
-n_l=3
 
-dr=[[0]+[ RMESH[at][i]-RMESH[at][i-1] for i in range(1,nr)] for at in range(n_at)]  
 
-def r_integral(RMESH_at,RADWF_at,Vtot_at,dr_at,l3,l4,nlm1):
+
+
+
+def r_integral(RADWF_at_l3,RADWF_at_l4,Vtot_at,DVDR1,dr_at):
+      Ba_and_C_r=np.dot((Vtot_at*RADWF_at_l3),(RADWF_at_l4*dr_at))
+      Aa_r=np.dot((DVDR1*RADWF_at_l3)*RADWF_at_l4)
+      print ('r integral')
+      '''
       Ba_and_C_r,Aa_r=np.array([0.j,0.j]),np.array([0.j,0.j])
-      Ba_and_C_r2,Aa_r2=np.array([0.j,0.j]),np.array([0.j,0.j])
       for nr1,r1 in enumerate(RMESH_at): 
        if nr1==0: continue  
-       dr1=dr_at[nr1]
-       '''  
-       #if Vr^2 devided by r^2
-       dv1dr=(Vtot_at[nlm1][nr1]-Vtot_at[nlm1][nr1-1])
-       B_and_C_r+=r1*Vtot_at[nlm1][nr1]*np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1]*dr1 
-       A_r+= r1**2*dv1dr *np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1] 
-       B_and_C_r2+=r1*Vtot_at[nlm1][nr1]*np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1][::-1]*dr1
-       A_r2+= r1**2*dv1dr *np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1][::-1]
-       '''
-       '''
-       #if Vr^2 not devided 
-       dv1dr=(Vtot_at[nlm1][nr1]-Vtot_at[nlm1][nr1-1])-2*Vtot_at[nlm1][nr1]/r1*dr1
-       # every *r1 -> /r1 and *r1^2 -> 1 because v is multiplied by r^2
-       B_and_C_r+=Vtot_at[nlm1][nr1]*np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1]*dr1  /r1 #*r**2
-       A_r+= dv1dr *np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1] #*r**2
-       B_and_C_r2+=Vtot_at[nlm1][nr1]*np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1][::-1]*dr1 /r1 #*r**2
-       A_r2+= dv1dr *np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1][::-1]#*r**2
-       '''
        #if Vr^2 devided by r (so we have V*r)
-       dv1dr=(Vtot_at[nlm1][nr1]-Vtot_at[nlm1][nr1-1]-Vtot_at[nlm1][nr1]*dr1)*r1
+       dv1dr=(Vtot_at[nr1]-Vtot_at[nr1-1]-Vtot_at[nr1]*dr1)*r1
        # every *r1 -> /r1 and *r1^2 -> 1 because v is multiplied by r^2
-       Ba_and_C_r+=Vtot_at[nlm1][nr1]*np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1]*dr1   #*r
-       Aa_r+= dv1dr *np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1] #*r*
-       Ba_and_C_r2+=Vtot_at[nlm1][nr1]*np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1][::-1]*dr1 #*r
-       Aa_r2+= dv1dr *np.conjugate(RADWF_at[l3][nr1])*RADWF_at[l4][nr1][::-1]#*r
-      return Ba_and_C_r,Aa_r,Ba_and_C_r2,Aa_r2
-
-print(max([max(i) for i in ENE_weights]))
-def k_integral(ALMBLM_at,ENE_weights,l5,m5,l4,m4,n_k_total):
-         Ia_kp,I2a_kp=np.array([0.j,0.j]),np.array([0.j,0.j])
-         for kp in range(len(ALMBLM_at)):
-            for iband in range(len(ALMBLM_at[kp])):
-#             for jband in range(n_band):
-              Ia_kp+=ENE_weights[kp][iband]*np.conjugate(ALMBLM_at[kp][iband][l5][m5+l5])*ALMBLM_at[kp][iband][l4][m4+l4]
-              I2a_kp+=ENE_weights[kp][iband]*np.conjugate(ALMBLM_at[kp][iband][l5][m5+l5])*ALMBLM_at[kp][iband][l4][m4+l4][::-1]  
-         return Ia_kp/n_k_total,I2a_kp/n_k_total
+       Ba_and_C_r+=Vtot_at[nr1]* (RADWF_at_l3[nr1])*RADWF_at_l4[nr1]*dr1   #*r
+       Aa_r+= dv1dr * (RADWF_at_l3[nr1])*RADWF_at_l4[nr1] #*r*
+      '''
+      return Ba_and_C_r,Aa_r
 
 
 def Hopfield(args):
-  [at,nlm1,dr,LM,RMESH,Vtot,RADWF,ALMBLM,n_k_total]=args
+  [at,nlm1,DR,LM,RMESH,Vtot_times_dr,DVDR,RADWF,ALMBLM,n_k,n_k_total]=args
 #def Hopfield(at,nlm1,dr,LM,RMESH,Vtot,RADWF,ALMBLM):
-#  brrr=[0,0,0,0,0,0]
   print (at,nlm1,LM[at])
   Hopfield,Hopfield2=0.j,0.j
   HopfieldS,Hopfield2S=0.j,0.j #with SOC
-  B_and_C_rpS,A_rpS,B_and_C_rp2S,A_rp2S,B_and_C_rS,A_rS,B_and_C_r2S,A_r2S=0.j,0.j,0.j,0.j,0.j,0.j,0.j,0.j
-  do_b,do_c=0,0
+  Ax,Bx,Cx,B_and_C_rp,A_rp,B_and_C_r,A_r=0.j,0.j,0.j,0.j,0.j,0.j,0.j
   [l1,m1]=LM[at][nlm1]
-  if m1==0: 
-   Bx=0.
-   do_b=0
-  else: do_b=1
-  if l1==0: 
-   print ('amhere')
-   Cx=0.
-   do_c=0
-  else: do_c=1
   for nlm2 in range(len(LM[at])):
    [l2,m2]=LM[at][nlm2]
    print (l1,': ',l2,Hopfield,Hopfield2)
-   if  m2==0: 
-    Bx=0.
-    do_b=0
-   if l2==0: 
-    Cx=0.
-    do_c=0
+   Bx,Cx=0.,0.
+   if m1==0 or m2==0:    do_b=0
+   else:     do_b=1
+   if l1==0 or l2==0:   do_c=0
+   else: do_c=1
    for l3 in range(n_l):#len(LM[at])):
     for m3 in range(-l3,l3+1):#len(LM[at])):
      for l4 in range(n_l):#len(LM[at])):
-      B_and_C_r,A_r,B_and_C_r2,A_r2=r_integral(RMESH[at],RADWF[at],Vtot[at],dr[at],l3,l4,nlm1)
-      if SOC==1:
-       B_and_C_rS,A_rS,B_and_C_r2S,A_r2S=r_integral(RMESH[at],RADWFsmall[at],Vtot[at],dr[at],l3,l4,nlm1)
-      for m4 in range(-l4,l4+1):#len(LM[at])):
-       if m4!=m3-m1: 
-        continue 
+#      for m4 in range(-l4,l4+1):#len(LM[at])):
+#       if m4!=m3-m1: 
+#        continue 
+       m4=m3-m1
+       if abs(m4)>abs(l4): continue
        Ax1=three_y(l1,m1,l4,m4,l3,m3)
-       if do_c: Cx=4*np.pi**2*(l1*(l1+1)/(((2*l1+1)*(2*l1+3))**0.5)*spec_int(l1+1,m1,l3,m3,l4,m4) \
-         -l1*(l1-1)/(((2*l1-1)*(2*l1+1))**0.5)*spec_int(l1-1,m1,l3,m3,l4,m4))
+       R34=np.array([ np.conjugate(RADWF[at][l3][k])*RADWF[at][l4][m] for k in range(len(RADWF[at][l3])) for m in range(len(RADWF[at][l4]))]) #array[4][nr]
+       A_r=np.sum(DVDR[at][nlm1]*R34,1)
+       print ('sh',R34.shape,A_r,A_r.shape)
+       if do_c: 
+        Cx=4*np.pi**2*l1*(l1+1)/(((2*l1+1)*(2*l1+3))**0.5)*spec_int(l1+1,m1,l3,m3,l4,m4) 
+        if l1!=1 and l1!=m1: 
+         Cx+= -4*np.pi**2*l1*(l1-1)/(((2*l1-1)*(2*l1+1))**0.5)*spec_int(l1-1,m1,l3,m3,l4,m4)
        if do_b: Bx1=(-2*np.pi*m1)*spec_int(l1,m1,l3,m3,l4,m4)
+       if do_b or do_c:
+        B_and_C_r= np.sum(Vtot_times_dr[at][nlm1]*R34,1)
        for l5 in range(n_l):#len(LM[at])):
         for m5 in range(-l5,l5+1):#len(LM[at])):
-         I_kp,I2_kp=k_integral(ALMBLM[at],ENE_weights,l5,m5,l4,m4,n_k_total)
+         print('l6 ended')
          for l6 in range(n_l):#len(LM[at])):
-          B_and_C_rp,A_rp,B_and_C_rp2,A_rp2=r_integral(RMESH[at],RADWF[at],Vtot[at],dr[at],l5,l6,nlm2)
-          if SOC==1:
-           B_and_C_rpS,A_rpS,B_and_C_rp2S,A_rp2S=r_integral(RMESH[at],RADWFsmall[at],Vtot[at],dr[at],l5,l6,nlm2)
-          for m6 in range(-l6,l6+1):#len(LM[at])):
-           if m6!=m5-m2:  
-            continue
+#          for m6 in range(-l6,l6+1):#len(LM[at])):
+#           if m6!=m5-m2:  
+#            continue
+           m6=m5-m2
+           if abs(m6)>abs(l6): continue
            Ax=Ax1*three_y(l2,m2,l6,m6,l5,m5)
+           R56=np.array([ np.conjugate(RADWF[at][l5][k])*RADWF[at][l6][m] for k in range(len(RADWF[at][l5])) for m in range(len(RADWF[at][l6]))])
+           A_rp=      np.sum(DVDR[at][nlm2]*R56,1)
            if do_b: Bx=Bx1*(-2*np.pi*m2)*spec_int(l2,m2,l5,m5,l6,m6)
            if do_c: Cx=Cx*(l2*(l2+1)/(((2*l2+1)*(2*l2+3))**0.5)*spec_int(l2+1,m2,l5,m5,l6,m6) \
               -l2*(l2-1)/(((2*l2-1)*(2*l2+1))**0.5)*spec_int(l2-1,m2,l5,m5,l6,m6))
-           I_k,I2_k=k_integral(ALMBLM[at],ENE_weights,l3,m3,l6,m6,n_k_total)
- #          print( round_complex(I_k[0],0), round_complex(B_and_C_r[0],0), round_complex(A_r[0],0), round(Bx,0), round(Ax,0))
-           Hopfield+=np.dot(B_and_C_r*B_and_C_rp*(Bx+Cx)+A_r*A_rp*Ax, I_k*I_kp)
-           Hopfield2+=np.dot(B_and_C_r2*B_and_C_rp2*(Bx+Cx)+A_r2*A_rp2*Ax, I2_k*I2_kp)
-           HopfieldS+=np.dot(B_and_C_rS*B_and_C_rpS*(Bx+Cx)+A_rS*A_rpS*Ax, I_k*I_kp)
-           Hopfield2S+=np.dot(B_and_C_r2S*B_and_C_rp2S*(Bx+Cx)+A_r2S*A_rp2S*Ax, I2_k*I2_kp)
- #          brrr1=[br.real for br in [B_and_C_r[0],Bx,A_r[0],Ax,I_k[0],I_kp[0]]]
- #          brrr=[max(brrr1[br],brrr[br]) for br in range(6)]
- #     print(l1,l2,':', Hopfield,brrr)
+           if do_b or do_c:
+            B_and_C_rp=np.sum(Vtot_times_dr[at][nlm2]*R56,1)     
+           ww=0  
+           B_and_C_x=Bx+Cx
+           for k in range(n_k):
+            for iband in  range(len(ENE[k])):
+             for kp in range(n_k):
+              for ibandp in range(len(ENE[kp])):
+#               almblm_r=np.kron(np.conjugate(ALMBLM[at][l3][m3][k][iband]),ALMBLM[at][l4][m4][kp][ibandp])
+#               almblm_rp=np.kron(np.conjugate(ALMBLM[at][l5][m5][kp][ibandp]),ALMBLM[at][l6][m6][k][iband])
+               almblm_r=np.array([w1*w2 for w1 in np.conjugate(ALMBLM[at][l3][m3][k][iband]) for w2 in ALMBLM[at][l4][m4][kp][ibandp]])
+               almblm_rp=np.array([w1*w2 for w1 in np.conjugate(ALMBLM[at][l5][m5][kp][ibandp]) for w2 in ALMBLM[at][l6][m6][k][iband]])
+               A=np.dot(almblm_r,A_r) *np.dot(almblm_rp,A_rp)
+#               A=sum([almblm_r[i]*A_r[i] for i in range(len(A_r))])*sum([almblm_rp[i]*A_rp[i] for i in range(len(A_rp))])
+               B_and_C=0.j
+               if do_b or do_c: 
+                B_and_C=np.dot(almblm_r,B_and_C_r)*np.dot(almblm_r,B_and_C_rp)
+#                B_and_C=sum([almblm_r[i]*B_and_C_r[i] for i in range(len(B_and_C_r))])*sum([almblm_rp[i]*B_and_C_rp[i] for i in range(len(B_and_C_rp))])
+                #r_integral(R3,R4,Vtot[at][nlm1][1:],DVDR1,dr[at])
+                #r_integral(R5,R6,Vtot[at][nlm2],DVDR2,dr[at])
+               Hopfield+=ENE_weights[k][iband]*ENE_weights[kp][ibandp]*(Ax*A+B_and_C*B_and_C_x)
+           print('integrals ended') 
+#             print('integral ended') 
   print('finally: ',at,nlm1,(Hopfield),(Hopfield2))
   print('finally: ',at,nlm1,round_complex(Hopfield,5),round_complex(Hopfield2,5))
   return Hopfield,Hopfield2,HopfieldS,Hopfield2S
 #ENE[i][j] i-kpoint, j- band
 #RADWF[i][j][k][0-1] i-atoms, j- l (orbital No), k - r-mesh, [0-1]-large  component of radwf and udot
 #ALMBLM[i][k][j][l][m][0-3]  i-atoms,k-kpoint, j-band, l (orbital No), m, [0: Re[Alm]+j*Im[Alm], 1:  Re[Blm]+j*Im[Blm]]
-
+# ALM[at][l][m][k][j]
 
 print('Calculate eta...')
 no_of_pool=sum([len(LM[at]) for at in range(n_at)])
 print ('No of pools:',no_of_pool)
 if __name__ == '__main__':
  with Pool(no_of_pool) as pol:
-  result=pol.map(Hopfield,[[at,nlm1,dr,LM,RMESH,Vtot,RADWF,ALMBLM,n_k_total] for at in range(n_at) for nlm1 in range(len(LM[at])) ])
+  result=pol.map(Hopfield,[[at,nlm1,DR,LM,RMESH,Vtot_times_dr,DVDR,RADWF,ALMBLM,n_k,n_k_total] for at in range(n_at) for nlm1 in range(len(LM[at])) ])
   print('Hopfield, Hopfield udot, Hopfield SOC, Hopfield udot SOC:')
   for i in range(4): print(sum([m[i] for m in result])),
   print('')
