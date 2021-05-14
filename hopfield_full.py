@@ -16,6 +16,7 @@ class hopfield(inputs):
   self.DR=real_structure.DR
   self.RMESH=real_structure.RMESH
   self.volume=real_structure.volume
+  self.Z_of_atoms=real_structure.Z_of_atoms
   self.ALMBLM=band_structure.ALMBLM
   self.ENE_kweights=band_structure.ENE_kweights
   self.LM=real_structure.LM
@@ -30,10 +31,10 @@ class hopfield(inputs):
  def calc_r_and_k_integrals(self):
   print('Calculate r and k integrals...')
   self.r_integrals= [
-       r_all_integrals(self.RADWF[at],self.Vtot[at],self.DVDR[at],self.RMESH[at], inputs.n_l) 
+       r_all_integrals(self.RADWF[at],self.Vtot[at],self.DVDR[at],self.RMESH[at], inputs.n_l, self.Z_of_atoms[at]) 
        for at in range(self.n_at) ]
   if self.so: self.r_integrals_so= [
-       r_all_integrals(self.RADWFsmall[at],self.Vtot[at],self.DVDR[at],self.RMESH[at], inputs.n_l)
+       r_all_integrals(self.RADWFsmall[at],self.Vtot[at],self.DVDR[at],self.RMESH[at], inputs.n_l, self.Z_of_atoms[at])
        for at in range(self.n_at) ]
   self.blm_integrals=[blm_all_integrals(self.ALMBLM[at],self.ENE_kweights,inputs.n_l,self.n_k,self.n_k_total,self.so)
        for at in range(self.n_at) ]
@@ -53,15 +54,15 @@ class hopfield(inputs):
   no_of_pool=sum([self.no_of_LM[at] for at in range(self.n_at)])
   self.result=parallel_job(no_of_pool,self.single_Hopfield,
               [[at,nlm1] for at in range(self.n_at) for nlm1 in range(self.no_of_LM[at]) ])
-#  if self.so:   
-#   self.result_so=parallel_job(no_of_pool,self.single_Hopfield_so,
-#              [[at,nlm1] for at in range(self.n_at) for nlm1 in range(self.no_of_LM[at]) ])
+  if self.so:   
+   self.result_so=parallel_job(no_of_pool,self.single_Hopfield_so,
+              [[at,nlm1] for at in range(self.n_at) for nlm1 in range(self.no_of_LM[at]) ])
 
 
  def print_result(self):
   print_result(self.result,self.dos,self.volume)
- # if self.so:   
- #  print_result(self.result_so,self.dos,self.volume)
+  if self.so:   
+   print_result(self.result_so,self.dos,self.volume)
 
 
 def Hopfield(args):
@@ -73,66 +74,50 @@ def Hopfield(args):
  print (at,nlm1,LM[at])
  Hopfield=0.j
  Ax,Bx,Cx,B_and_C_rp,A_rp,B_and_C_r,A_r=0.j,0.j,0.j,0.j,0.j,0.j,0.j
- [l1,m11]=LM[at][nlm1]
- if m11==0: tabm=[m11]
- else: tabm=[-m11,m11]
- for m1 in tabm:
-  for nlm2 in range(no_of_lm1_and_2):
-   [l2,m22]=LM[at][nlm2]
-   if m22==0: tabm2=[m22]
-   else: tabm2=[-m22,m22]
-   for m2 in tabm2:
-    if l1!=l2 or m1!=m2: continue
+# [l1,m11]=LM[at][nlm1]
+# if m11==0: tabm=[m11]
+# else: tabm=[-m11,m11]
+# for m1 in tabm:
+#  for nlm2 in range(no_of_lm1_and_2):
+#   [l2,m22]=LM[at][nlm2]
+#   if m22==0: tabm2=[m22]
+#   else: tabm2=[-m22,m22]
+#   for m2 in tabm2:
+#    if l1!=l2 or m1!=m2: continue
 #   print (l1,': ',l2,Hopfield)
-    Bx,Cx=0.,0.
-    if m1==0 or m2==0:    do_b=0 #because we multiply by m laterly [deeper sens: because for m=0 Y doesnt depend on phi, so dY/dphi=0 ]
-    else:     do_b=1
-    if l1==0 or l2==0:   do_c=0 #because for l=0 Y=const, so dY/dtheta=0
-    else: do_c=1
-    do_c=1
-    for l3 in range(n_l):#len(LM[at])):
+ l1,m1,l2,m2,nlm1,nlm2=0,0,0,0,0,0
+ for l3 in range(n_l):#len(LM[at])):
      for m3 in range(-l3,l3+1):#len(LM[at])):
       for l4 in range(n_l):#len(LM[at])):
+        if l3>l4+1 or l3<abs(l4-1): continue
+        m4=m3
 #      for m4 in range(-l4,l4+1):#len(LM[at])):
 #       if m4!=m3-m1: 
 #        continue 
-        m4=m3-m1
+#        m4=m3-m1
         if abs(m4)>abs(l4): continue #because -l4<=m4<=l4
-        Ax1=three_y(l1,m1,l4,m4,l3,m3)
-        if do_c:
-         Cx=spec_int2(l1,m1,l3,m3,l4,m4,Plm,dPlm) #/4./np.pi
-  #      Cx=4*np.pi**2*l1*(l1+1)/(((2*l1+1)*(2*l1+3))**0.5)*spec_int(l1+1,m1,l3,m3,l4,m4) 
-  #      if l1!=1 and l1!=m1: 
-  #       Cx+= -4*np.pi**2*l1*(l1-1)/(((2*l1-1)*(2*l1+1))**0.5)*spec_int(l1-1,m1,l3,m3,l4,m4)
-        else: Cx=0
-        if do_b: Bx1=(-4*(np.pi**2)*m1)*spec_int(l1,m1,l3,m3,l4,m4,Ylm0) #/4./np.pi
-        else: Bx1=0
+        Aang1=three_y(l4,m4,1,0,l3,-m3)
         [B_and_C_r,A_r]=chosen_r_integrals(r_integrals[nlm1][l3][l4])
         for l5 in range(n_l):#len(LM[at])):
          for m5 in range(-l5,l5+1):#len(LM[at])):
           almblm_kp=chosen_kp_integrals(blm_integrals[l5][l5+m5][l4][l4+m4])
           for l6 in range(n_l):#len(LM[at])):
+            if l5>l6+1 or l5<abs(l6-1): continue
+            m6=m5
 #          for m6 in range(-l6,l6+1):#len(LM[at])):
 #           if m6!=m5-m2:  
 #            continue
-            m6=m5-m2
+#            m6=m5-m2
             if abs(m6)>abs(l6): continue #because -l6<=m6<=l6
-            Ax=Ax1*three_y(l2,m2,l6,m6,l5,m5)
-            [B_and_C_rp,A_rp]=chosen_rp_integrals(r_integrals[nlm2][l5][l6])
-            if do_b:  Bx=Bx1*m2*spec_int(l2,m2,l5,m5,l6,m6,Ylm0)
-            if do_c: # and m2!=l2: # and l2>1: 
-                 Cx=Cx*spec_int2(l2,m2,l5,m5,l6,m6,Plm,dPlm)
-#               Cx=Cx*(l2*(l2+1)/(((2*l2+1)*(2*l2+3))**0.5)*spec_int(l2+1,m2,l5,m5,l6,m6) \
-#              -l2*(l2-1)/(((2*l2-1)*(2*l2+1))**0.5)*spec_int(l2-1,m2,l5,m5,l6,m6))   
-            B_and_C_x=Bx+Cx
+            [B_and_C_rp,A_rp]=chosen_r_integrals(r_integrals[nlm2][l5][l6])
+            Aang=4*np.pi/3.*((-1)**(m3+m5))*Aang1*three_y(l6,m6,1,0,l5,-m5)
             almblm_k=chosen_k_integrals(blm_integrals[l3][l3+m3][l6][l6+m6])
            #from lapw7 ! every alm, blm, clm has to be multiplied by a    prefactor = 1/sqrt( vol(UC) ), so 1 integral  - by 1/vol, 2 integrals, by 1/vol^2 --not needed, lapw2 already does it
             almblm_k_kp=almblm_k*almblm_kp #/(volume**2)
             A=np.dot(almblm_k_kp,A_r*A_rp)
-            B_and_C=np.dot(almblm_k_kp,B_and_C_r*B_and_C_rp)
-            hopfield_contrib=(Ax*A+B_and_C_x*B_and_C) #*(1j**(-l3+l4-l5+l6))
+            hopfield_contrib=(1./(4*np.pi)) *Aang*A #*(1j**(-l3+l4-l5+l6))
             Hopfield+=hopfield_contrib
-            if l1==0 and l2==0 and l3==0 and l4==0 and l5==0 and l6==0  and (Ax!=0 or B_and_C_x!=0): print (Ax,np.dot(almblm_k,almblm_kp),np.dot(A_r,A_rp))
+#            print (l3,l4,l5,l6,np.dot(almblm_k,almblm_kp),np.dot(A_r,A_rp))
  print('finally: ',at,nlm1,round_complex(Hopfield,9))
  return Hopfield
 
@@ -196,10 +181,7 @@ np.conjugate(ALMBLM_at[l3][l3+m3][k][iband][3])*ALMBLM_at[l5][l5+m5][k][iband][3
  return results
 
 def sum_weights(weight,n_k_total):
- suma=sum([ sum(i) for i in weight]) #0
-# for k in range(n_k):
-#  for iband in  range(len(weight[k])): 
-#   suma+=weight[k][iband]
+ suma=sum([ sum(i) for i in weight]) 
  print (suma/n_k_total, 'should equal to DOS in 1/Ry')
  return suma #suma devided by n_k_total should equal to N(EF)
 
@@ -216,12 +198,13 @@ def blm_all_integrals(ALMBLM_at, weight,n_l,n_k,n_k_total,so):
                                           /suma/step #I am not sure, but in my experience it is needed to get agreement soc and no soc values. Probably because Almblm are doubled in no/soc case to get DOS per both spins
  return blm_integrals
 
-def r_integral(RADWF_at_l3,RADWF_at_l4,Vtot_at,DVDR1,RMESH_at):
+def r_integral(RADWF_at_l3,RADWF_at_l4,Vtot_at,DVDR1,RMESH_at,Z_of_atom):
  #     norm=np.trapz(np.multiply(RADWF_at_l3,RADWF_at_l4)*(RMESH_at*RMESH_at),x=RMESH_at)
  #     print(norm)
  #     if norm==0: return [0,0]
  #     else:
-       Ba_and_C_r=np.trapz(np.multiply(np.multiply(Vtot_at,RADWF_at_l3),(RADWF_at_l4)),x=RMESH_at)
+#       print(len(DVDR1),len(RADWF_at_l3),len(RADWF_at_l4),len(RMESH_at))
+       Ba_and_C_r=0 #np.trapz(np.multiply(np.multiply(Vtot_at,RADWF_at_l3),(RADWF_at_l4)/RMESH_at),x=RMESH_at)-np.trapz(np.multiply(np.multiply(Z_of_atom,RADWF_at_l3),(RADWF_at_l4)),x=RMESH_at)
        Aa_r=np.trapz(np.multiply(np.multiply(DVDR1,RADWF_at_l3),RADWF_at_l4),x=RMESH_at)
        '''
       Ba_and_C_r,Aa_r=np.array([0.j,0.j]),np.array([0.j,0.j])
@@ -235,28 +218,28 @@ def r_integral(RADWF_at_l3,RADWF_at_l4,Vtot_at,DVDR1,RMESH_at):
        '''
        return [Ba_and_C_r,Aa_r]
 
-def r_all_integrals(RADWF_at,Vtot_at,DVDR1,RMESH_at,n_l):
+def r_all_integrals(RADWF_at,Vtot_at,DVDR1,RMESH_at,n_l, Z_of_atom):
  r_integrals=[[[ []  for l5 in range(n_l) ] for l3 in range(n_l) ] for l1 in range(len(DVDR1))]
  for l1 in range(len(DVDR1)):
   for l3 in range(n_l):
    for l5 in range(n_l):
       r_integrals[l1][l3][l5]=[\
-r_integral(np.conjugate(RADWF_at[l3][0]),RADWF_at[l5][0],Vtot_at[l1],DVDR1[l1],RMESH_at),\
-r_integral(np.conjugate(RADWF_at[l3][0]),RADWF_at[l5][1],Vtot_at[l1],DVDR1[l1],RMESH_at),\
-r_integral(np.conjugate(RADWF_at[l3][0]),RADWF_at[l5][2],Vtot_at[l1],DVDR1[l1],RMESH_at),\
-r_integral(np.conjugate(RADWF_at[l3][0]),RADWF_at[l5][3],Vtot_at[l1],DVDR1[l1],RMESH_at),\
-r_integral(np.conjugate(RADWF_at[l3][1]),RADWF_at[l5][0],Vtot_at[l1],DVDR1[l1],RMESH_at),\
-r_integral(np.conjugate(RADWF_at[l3][1]),RADWF_at[l5][1],Vtot_at[l1],DVDR1[l1],RMESH_at),\
-r_integral(np.conjugate(RADWF_at[l3][1]),RADWF_at[l5][2],Vtot_at[l1],DVDR1[l1],RMESH_at),\
-r_integral(np.conjugate(RADWF_at[l3][1]),RADWF_at[l5][3],Vtot_at[l1],DVDR1[l1],RMESH_at),\
-r_integral(np.conjugate(RADWF_at[l3][2]),RADWF_at[l5][0],Vtot_at[l1],DVDR1[l1],RMESH_at),\
-r_integral(np.conjugate(RADWF_at[l3][2]),RADWF_at[l5][1],Vtot_at[l1],DVDR1[l1],RMESH_at),\
-r_integral(np.conjugate(RADWF_at[l3][2]),RADWF_at[l5][2],Vtot_at[l1],DVDR1[l1],RMESH_at),\
-r_integral(np.conjugate(RADWF_at[l3][2]),RADWF_at[l5][3],Vtot_at[l1],DVDR1[l1],RMESH_at),\
-r_integral(np.conjugate(RADWF_at[l3][3]),RADWF_at[l5][0],Vtot_at[l1],DVDR1[l1],RMESH_at),\
-r_integral(np.conjugate(RADWF_at[l3][3]),RADWF_at[l5][1],Vtot_at[l1],DVDR1[l1],RMESH_at),\
-r_integral(np.conjugate(RADWF_at[l3][3]),RADWF_at[l5][2],Vtot_at[l1],DVDR1[l1],RMESH_at),\
-r_integral(np.conjugate(RADWF_at[l3][3]),RADWF_at[l5][3],Vtot_at[l1],DVDR1[l1],RMESH_at)]
+r_integral(np.conjugate(RADWF_at[l3][0]),RADWF_at[l5][0],Vtot_at[l1],DVDR1[l1],RMESH_at,Z_of_atom),\
+r_integral(np.conjugate(RADWF_at[l3][0]),RADWF_at[l5][1],Vtot_at[l1],DVDR1[l1],RMESH_at,Z_of_atom),\
+r_integral(np.conjugate(RADWF_at[l3][0]),RADWF_at[l5][2],Vtot_at[l1],DVDR1[l1],RMESH_at,Z_of_atom),\
+r_integral(np.conjugate(RADWF_at[l3][0]),RADWF_at[l5][3],Vtot_at[l1],DVDR1[l1],RMESH_at,Z_of_atom),\
+r_integral(np.conjugate(RADWF_at[l3][1]),RADWF_at[l5][0],Vtot_at[l1],DVDR1[l1],RMESH_at,Z_of_atom),\
+r_integral(np.conjugate(RADWF_at[l3][1]),RADWF_at[l5][1],Vtot_at[l1],DVDR1[l1],RMESH_at,Z_of_atom),\
+r_integral(np.conjugate(RADWF_at[l3][1]),RADWF_at[l5][2],Vtot_at[l1],DVDR1[l1],RMESH_at,Z_of_atom),\
+r_integral(np.conjugate(RADWF_at[l3][1]),RADWF_at[l5][3],Vtot_at[l1],DVDR1[l1],RMESH_at,Z_of_atom),\
+r_integral(np.conjugate(RADWF_at[l3][2]),RADWF_at[l5][0],Vtot_at[l1],DVDR1[l1],RMESH_at,Z_of_atom),\
+r_integral(np.conjugate(RADWF_at[l3][2]),RADWF_at[l5][1],Vtot_at[l1],DVDR1[l1],RMESH_at,Z_of_atom),\
+r_integral(np.conjugate(RADWF_at[l3][2]),RADWF_at[l5][2],Vtot_at[l1],DVDR1[l1],RMESH_at,Z_of_atom),\
+r_integral(np.conjugate(RADWF_at[l3][2]),RADWF_at[l5][3],Vtot_at[l1],DVDR1[l1],RMESH_at,Z_of_atom),\
+r_integral(np.conjugate(RADWF_at[l3][3]),RADWF_at[l5][0],Vtot_at[l1],DVDR1[l1],RMESH_at,Z_of_atom),\
+r_integral(np.conjugate(RADWF_at[l3][3]),RADWF_at[l5][1],Vtot_at[l1],DVDR1[l1],RMESH_at,Z_of_atom),\
+r_integral(np.conjugate(RADWF_at[l3][3]),RADWF_at[l5][2],Vtot_at[l1],DVDR1[l1],RMESH_at,Z_of_atom),\
+r_integral(np.conjugate(RADWF_at[l3][3]),RADWF_at[l5][3],Vtot_at[l1],DVDR1[l1],RMESH_at,Z_of_atom)]
  return r_integrals
 
 def chosen_r_integrals(r_int34):
