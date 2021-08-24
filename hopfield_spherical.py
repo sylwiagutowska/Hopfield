@@ -5,60 +5,24 @@ from multiprocessing import Process,Pool
 ##mathematica SphericalHarmonicy(l,m,theta,phi). theta in [0,pi), phi in [0,2pi]
 ##scipy scipy.special.sph_harm(m, l, theta, phi) , theta in [0,2pi], phi in [0,pi]
 ##sympy.functions.special.spherical_harmonics.Ynm(l,m,theta,phi . theta in [0,pi), phi in [0,2pi]
-
-class hopfield(inputs):
+CIN=1e-22
+class hopfield_spherical(inputs):
  def __init__(self,real_structure,band_structure):
   self.so=inputs.so
   self.RADWF=real_structure.RADWF
   self.RADWFsmall=real_structure.RADWFsmall
   self.Vtot=real_structure.Vtot
-  self.DVDR=real_structure.DVDR #it is r^2 * dV
+  self.V=[vi[0] for vi in self.Vtot] #only spehrical part
   self.DR=real_structure.DR
   self.RMESH=real_structure.RMESH
   self.volume=real_structure.volume
   self.Z_of_atoms=real_structure.Z_of_atoms
-  self.ALMBLM=band_structure.ALMBLM
-  self.ENE_kweights=band_structure.ENE_kweights
-  self.LM=real_structure.LM
   self.n_at=band_structure.n_at
-  self.n_k=band_structure.n_k
-  self.n_k_total=band_structure.n_k_total
   self.dos=band_structure.dos
+  self.ldos=band_structure.LDOS
   self.result=[]
-  self.r_integrals=[]
-  self.blm_integrals=[]
-  self.no_of_LM=[ len(at) for at in self.LM]
- def calc_r_and_k_integrals(self):
-  print('Calculate r and k integrals...')
-  self.r_integrals= [
-       r_all_integrals(self.RADWF[at],self.Vtot[at],self.DVDR[at],self.RMESH[at], inputs.n_l, self.Z_of_atoms[at]) 
-       for at in range(self.n_at) ]
-  if self.so: self.r_integrals_so= [
-       r_all_integrals(self.RADWFsmall[at],self.Vtot[at],self.DVDR[at],self.RMESH[at], inputs.n_l, self.Z_of_atoms[at])
-       for at in range(self.n_at) ]
-  self.blm_integrals=[blm_all_integrals(self.ALMBLM[at],self.ENE_kweights,inputs.n_l,self.n_k,self.n_k_total,self.so)
-       for at in range(self.n_at) ]
-
-
- def single_Hopfield(self,args): #args=[at,nlm1]
-  [at,nlm1]=args
-  return Hopfield([at,nlm1,self.DR,self.LM,
-                   self.r_integrals[at],self.blm_integrals[at],self.n_k, self.n_k_total,inputs.n_l,self.volume])
- def single_Hopfield_so(self,args): #args=[at,nlm1]
-  [at,nlm1]=args
-  return Hopfield([at,nlm1,self.DR,self.LM,
-                   self.r_integrals_so[at],self.blm_integrals[at],self.n_k, self.n_k_total,inputs.n_l,self.volume])
-
-
- def parallel_Hopfield(self):
-  no_of_pool=sum([self.no_of_LM[at] for at in range(self.n_at)])
-  self.result=parallel_job(no_of_pool,self.single_Hopfield,
-              [[at,nlm1] for at in range(self.n_at) for nlm1 in range(self.no_of_LM[at]) ])
-  if self.so:   
-   self.result_so=parallel_job(no_of_pool,self.single_Hopfield_so,
-              [[at,nlm1] for at in range(self.n_at) for nlm1 in range(self.no_of_LM[at]) ])
-
-
+ def calc_hopfield_spherical(self):
+  return calc_hopfield_spherical(self.ldos,self.dos,self.V,self.RADWF,self.n_at)
  def print_result(self):
   print_result(self.result,self.dos,self.volume)
   if self.so:   
@@ -66,71 +30,33 @@ class hopfield(inputs):
    print_result(self.result_so,self.dos,self.volume)
 
 
-def Hopfield(args):
- [at,nlm1,DR,LM,r_integrals,blm_integrals,n_k,n_k_total,n_l,volume]=args
-#def Hopfield(at,nlm1,dr,LM,RMESH,Vtot,RADWF,ALMBLM):
- no_of_lm1_and_2=len(LM[at])
- Plm,dPlm=generate_Plm(10)
- Ylm0=generate_Ylm_0(Plm)
- print (at,nlm1,LM[at])
- Hopfield=0.j
- Ax,Bx,Cx,B_and_C_rp,A_rp,B_and_C_r,A_r=0.j,0.j,0.j,0.j,0.j,0.j,0.j
-# [l1,m11]=LM[at][nlm1]
-# if m11==0: tabm=[m11]
-# else: tabm=[-m11,m11]
-# for m1 in tabm:
-#  for nlm2 in range(no_of_lm1_and_2):
-#   [l2,m22]=LM[at][nlm2]
-#   if m22==0: tabm2=[m22]
-#   else: tabm2=[-m22,m22]
-#   for m2 in tabm2:
-#    if l1!=l2 or m1!=m2: continue
-#   print (l1,': ',l2,Hopfield)
- l1,m1,l2,m2=0,0,0,0
- [l1,m1]=LM[at][nlm1]
- for nlm2 in range(len(LM[at])):
-   [l2,m2]=LM[at][nlm2]
-   for l3 in range(n_l):#len(LM[at])):
-     for m3 in range(-l3,l3+1):#len(LM[at])):
-      for l4 in range(n_l):#len(LM[at])):
-        m4=m3-m1
-#      for m4 in range(-l4,l4+1):#len(LM[at])):
-#       if m4!=m3-m1: 
-#        continue 
-#        m4=m3-m1
-        if abs(m4)>l4: continue #because -l4<=m4<=l4
-#        Aang1=three_y(l4,m4,1,0,l3,-m3)
-        Aang=spec_int_1(l1,m1,l3,m3,l4,m4,Ylm0)
-        Bang=spec_int_2(l1,m1,l3,m3,l4,m4,Ylm0)
-        [B_r,A_r]=chosen_r_integrals(r_integrals[nlm1][l3][l4])
-        for l5 in range(n_l):#len(LM[at])):
-         for m5 in range(-l5,l5+1):#len(LM[at])):
-          almblm_kp=chosen_kp_integrals(blm_integrals[l5][l5+m5][l4][l4+m4])
-          for l6 in range(n_l):#len(LM[at])):
-            m6=m5-m2
-#          for m6 in range(-l6,l6+1):#len(LM[at])):
-#           if m6!=m5-m2:  
-#            continue
-#            m6=m5-m2
-            if abs(m6)>l6: continue #because -l6<=m6<=l6
-            [B_rp,A_rp]=chosen_r_integrals(r_integrals[nlm2][l5][l6])
-#            Aang=4*np.pi/3.*((-1)**(m3+m5))*Aang1*three_y(l6,m6,1,0,l5,-m5)
-            Aangp=spec_int_1(l2,m2,l5,m5,l6,m6,Ylm0)
-            Bangp=spec_int_2(l2,m2,l5,m5,l6,m6,Ylm0)
-            almblm_k=chosen_k_integrals(blm_integrals[l3][l3+m3][l6][l6+m6])
-           #from lapw7 ! every alm, blm, clm has to be multiplied by a    prefactor = 1/sqrt( vol(UC) ), so 1 integral  - by 1/vol, 2 integrals, by 1/vol^2 --not needed, lapw2 already does it
-            almblm_k_kp=almblm_k*almblm_kp #/(volume**2)
-            AA=np.dot(almblm_k_kp,A_r*A_rp)
-            AB=np.dot(almblm_k_kp,A_r*B_rp)
-            BA=np.dot(almblm_k_kp,B_r*A_rp)
-            BB=np.dot(almblm_k_kp,B_r*B_rp)
-#            hopfield_contrib=(1./(4*np.pi)) *Aang*A #*(1j**(-l3+l4-l5+l6))
-            hopfield_contrib=2*np.pi*2*np.pi*( \
-             Aang*Aangp*AA- Aang*Bangp*AB -Bang*Aangp*BA+ Bang*Bangp*BB)
-            Hopfield+=hopfield_contrib
-#            print (l3,l4,l5,l6,np.dot(almblm_k,almblm_kp),np.dot(A_r,A_rp))
- print('finally: ',at,nlm1,round_complex(Hopfield,9))
- return Hopfield
+def calc_hopfield_spherical(LDOS,TOTDOS,V,RADWF,na):
+	atomic_eta=[]
+	print (LDOS,na)
+	for i in range(na):
+	 eta_i=0
+	 for l in range(len(LDOS[i][2:])-1):
+	   eta_l=(2.*l+2.)*LDOS[i][l+2]*LDOS[i][l+3]/(2.*l+1.)/(2.*l+3.)/TOTDOS
+	   INTi=[]
+	   integral=0 #[0,0]
+	   for ri in range(1,len(V[i])):
+	#    dr=RMESH[i][ri]-RMESH[i][ri-ri]
+	    dVdr=(V[i][ri]-V[i][ri-1]) #/dr
+	    '''
+	    inti=  [RADWF[i][l][ri  ][0]*dVdr*RADWF[i][l+1][ri  ][0],CIN*(RADWF[i][l][ri  ][1]*dVdr*RADWF[i][l+1][ri  ][1])]
+	    inti_1=[RADWF[i][l][ri-1][0]*dVdr*RADWF[i][l+1][ri-1][0],CIN*(RADWF[i][l][ri-1][1]*dVdr*RADWF[i][l+1][ri-1][1])]
+	    integral=[integral[m]+(inti[m]+inti_1[m])        *dr    /2. for m in range(2)]
+	   eta_l=eta_l*(integral[0]*integral[0]+integral[1]*integral[1])
+	   eta_i=eta_i+eta_l
+	    '''
+	    inti=  RADWF[i][l][0][ri  ]*dVdr*RADWF[i][l+1][0][ri  ]+CIN*(RADWF[i][l][1][ri  ]*dVdr*RADWF[i][l+1][1][ri  ])
+	    inti_1=RADWF[i][l][0][ri-1]*dVdr*RADWF[i][l+1][0][ri-1]+CIN*(RADWF[i][l][1][ri-1]*dVdr*RADWF[i][l+1][1][ri-1])
+	    integral=integral+(inti+inti_1)/2. #*dr
+	   eta_l=eta_l*integral*integral
+	   eta_i=eta_i+eta_l
+	 atomic_eta.append(eta_i)
+	print (atomic_eta)
+	return atomic_eta
 
 
 def parallel_job(no_of_pool,function,arguments):
