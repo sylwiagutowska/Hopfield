@@ -90,6 +90,7 @@ def Hopfield(args):
  [l1,m1]=LM[at][nlm1]
  for nlm2 in range(len(LM[at])):
    [l2,m2]=LM[at][nlm2]
+   if l2!=l1 or m1!=m2: continue
    for l3 in range(n_l):#len(LM[at])):
      for m3 in range(-l3,l3+1):#len(LM[at])):
       for l4 in range(n_l):#len(LM[at])):
@@ -105,9 +106,11 @@ def Hopfield(args):
         [B_r,A_r]=chosen_r_integrals(r_integrals[nlm1][l3][l4])
         for l5 in range(n_l):#len(LM[at])):
          for m5 in range(-l5,l5+1):#len(LM[at])):
+#          if l5!=l4 or m5!=m4: continue
           almblm_kp=chosen_kp_integrals(blm_integrals[l5][l5+m5][l4][l4+m4])
           for l6 in range(n_l):#len(LM[at])):
             m6=m5-m2
+#            if m6!=m3 or l6!=l3: continue
 #          for m6 in range(-l6,l6+1):#len(LM[at])):
 #           if m6!=m5-m2:  
 #            continue

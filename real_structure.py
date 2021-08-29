@@ -278,17 +278,17 @@ def interpolate_V(RMESH0,V):
  nib=80
  nbl=20
  r0= (RMESH0[0])
- x2= (RMESH0[-1]-r0)/(nib*(2.**nbl-1.))+1e-3
+ x2= (RMESH0[-1]-r0)/(nib*(2.**nbl-1.)) #+1e-3
  while x2<r0:
   nbl=nbl-1
-  x2=(RMESH0[-1]-r0)/(nib*(2.**nbl)-1.) +1e-3
+  x2=(RMESH0[-1]-r0)/(nib*(2.**nbl)-1.) #+1e-3
  dx=x2
  RMESH=[]
  xx=0
  for i in range(nbl):
   for j in range(nib):
    xx+=dx
-   if  xx<RMESH0[-1]:
+   if  xx<=RMESH0[-1]:
     RMESH.append(xx)
   dx=dx+dx
  Vf=interp1d(RMESH0,V)
@@ -338,5 +338,142 @@ def lipman(l,RMESH,Rstart,Ef,V2,Z_of_atom): #schrea.f from kkr
    P[0]=SSR[i-2]   
  SSR=SSR/(simps(SSR*SSR,RMESH)**0.5)
 
-
  return SSR
+
+
+def tabint(z,x,y,imax,imin,n): #find value of fction Y(x) at x=z (from kkr)
+ i=imin
+ w=y[imin]
+ if z>x[i]:
+  w=y[imax]
+  for i in range(imin,imax):
+   if z<x[i]:
+    m=int(n/2)
+    if (i-imin)<(m+1): i=imin+m+1
+    if (i+m)>imax: i=imax-m
+    i1=i-m-1
+    i2=i+m
+    w=0
+    for i in range(i1,i2):
+     pl=1.
+     for j in range(i1,i2):    
+      if i!=j: pl=(z-x[j])/(x[i]-x[j])*pl
+     w=w+pl*y[i]
+ return w
+
+def lipman_rel(l,RMESH,Rstart,Ef,V2,Z_of_atom): #dirrea.f from kkr
+ zs=Z_of_atom
+ V3=V2 +2*Z_of_atom/RMESH
+ VIN=V2 +l*(l+1)/RMESH/RMESH
+# rd=RMESH
+# VR=V2
+ nr=len(RMESH)
+ rd=np.zeros((nr))
+ VR=np.zeros((nr))
+ rnot=RMESH[1]
+ h=np.log(RMESH[-1]/RMESH[1])/(nr-1)
+ d=np.exp(h)
+ rx=rnot
+# rd[0]=RMESH[0]
+ rd[0]=rx
+ VR[0]=V2[0]
+ rx=rx*d
+ for m in range(1,nr):
+  rd[m]=rx
+#  VR[m]=tabint(rx,RMESH,V2,nr-1,1,3)
+  rx=rx*d
+ rd[-1]=RMESH[-1]
+ h=open('rmesh.dat','w')
+ for i in range(nr):
+  h.write(str(rd[i])+' '+str(RMESH[i])+'\n')
+ h.close()
+ Vf=interp1d(RMESH,V3)
+ VR=Vf(rd)
+ VR[-1]=V2[-1]
+
+
+ h=np.log(RMESH[-1]/RMESH[1])/(nr-1)
+ h3=h/3.
+ c=2*137.037
+ c2=c*c
+ tzbyc2=2*zs/c2
+ fltlp=l*(l+1)
+ ssr=np.zeros((nr)) #[0 for m in range(nr)]
+ ssi=np.zeros((nr)) #[0 for m in range(nr)]
+ a0=[0.,  0.,  0,  0,  0]
+ b0=[0.,  0.,  0,  0,  0]
+ a=np.zeros((nr)) #[0 for m in range(nr)]
+ b=np.zeros((nr)) #[0 for m in range(nr)]
+ da=[0.,  0.,  0,  0,  0,0.]
+ db=[0.,  0.,  0,  0,  0,0.]
+ if zs!=0:
+  g=(fltlp+1.-(2*zs/c)**2)**0.5
+  a0[0]=tzbyc2
+  b0[0]=g-1.
+  p11=-tzbyc2*(Ef-VR[0])
+  p12=(Ef-VR[0])/c2+1.
+  p21=-(Ef-VR[0])
+  p22=-(1.-g*g)*((Ef-VR[0])/c2+1.)/tzbyc2
+  for k in range(1,5):
+   dk=(k)*(2*g+k+2)
+   a0[k]=(p11*a0[k-1]+(g+k+1)*p12*b0[k-1])/dk
+   b0[k]=((g+k-1)*p21*a0[k-1]+p22*b0[k-1])/dk
+  for k in range(5):
+   a[k]=a0[0]+rd[k]*(a0[1]+rd[k]*(a0[2]+rd[k]*(a0[3]+rd[k]*a0[4])))
+   b[k]=b0[0]+rd[k]*(b0[1]+rd[k]*(b0[2]+rd[k]*(b0[3]+rd[k]*b0[4])))
+  q11=1.-g
+  q22=-(1+g)
+  q12=tzbyc2
+  q21=fltlp/tzbyc2 - 2*zs
+  i1=4
+  for k in range(4):
+   i14k=i1-4+k+1
+   da[k+1]=(q11*a[i14k]+ (rd[i14k]*p12+q12)*b[i14k])*h3
+   db[k+1]=(q22*b[i14k]+ (rd[i14k]*p21+q21)*a[i14k])*h3
+ else:
+  a0=[0.,  (Ef-VR[0])/c2+1.,  0,  0,  0]
+  b0=[l,  0.,  0,  0,  0]
+  for k in range(2,5):
+   a0[k]=a0[1]*b0[k-1]/(l+k-1)
+   b0[k]=-(l-1+k+1)*(Ef-VR[0])*a0[k-2]/((l+k+1)*(l+k)-l*(l+1))
+  for k in range(5):
+   a[k]=a0[0]+rd[k]* (a0[1]+rd[k]*(a0[2]*(a0[3]*rd[k]*a0[4])))
+   b[k]=b0[0]+rd[k]* (b0[1]+rd[k]*(b0[2]*(b0[3]*rd[k]*b0[4])))
+  g=l
+  q11=1.-g
+  q22=-(1.+g)
+  i1=4
+  for k in range(4):
+   i14k=i1-4+k+1
+   da[k+1]=(q11*a[i14k]+a0[1]*rd[i14k]*b[i14k]) *h3
+   db[k+1]=(q22*b[i14k]+(fltlp/(rd[i14k]*a0[1])- (Ef-VR[0])*rd[i14k])*a[i14k])*h3
+
+ k=i1
+ ak4=a[k-3]
+ bk4=b[k-3]
+ for k in range(i1+1,nr):
+  rp21=fltlp/(tzbyc2+((Ef-VR[k])/c2+1.)*rd[k]) -2*zs- (Ef-VR[k])*rd[k]
+  rp12=tzbyc2 + ((Ef-VR[k])/c2+1.)*rd[k]
+  atk=ak4+ 8.*(da[4]+da[2]-0.5*da[3])
+  btk=bk4+ 8.*(db[4]+db[2]-0.5*db[3])
+  da[5]=h3*(q11*atk+rp12*btk)
+  db[5]=h3*(q22*btk+rp21*atk)
+  a[k]=a[k-1]+ 1.125*da[5] + 2.375*da[4] - 0.625*da[3] + 0.125*da[2]
+  b[k]=b[k-1]+ 1.125*db[5] + 2.375*db[4] - 0.625*db[3] + 0.125*db[2]
+  ak4=a[k-3]
+  bk4=b[k-3]
+  for  i in range(1,6):
+   da[i-1]=da[i]
+   db[i-1]=db[i]
+  da[4]= h3*(q11*a[k]+rp12*b[k])
+  db[4]= h3*(q22*b[k]+rp21*a[k])
+
+# imax=nr-1
+# imin=2
+# ssr[0]=0.
+ af=interp1d(rd,a)
+ a2=af(RMESH[1:])
+ for i in range(1,nr):
+  ssr[i]=(RMESH[i]**g)*a2[i-1] #tabint(RMESH[i],rd,a,imax,imin,3)
+ ssr=ssr/(simps(ssr*ssr,RMESH)**0.5)
+ return ssr

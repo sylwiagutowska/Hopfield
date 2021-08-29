@@ -5,13 +5,17 @@ from real_structure import *
 from hopfield_full import *
 from hopfield_spherical import *
 
-mode='full' #'full'
+mode='spherical' #'full'
 
 inputs=inputs()
 #inputs.if_so()
 #inputs.run_calculations()
 
-if mode=='spherical': inputs.radwf_file='RADWF/RADWF.radwf'
+if mode=='spherical': 
+  inputs.pot_file='RADWF/RADWF.vtotal'
+  inputs.radwf_file='RADWF/RADWF.radwf'
+
+mode='full' #'full'
 band_str=band_structure()
 band_str.read_ef_and_dos()
 band_str.read_almblm()
