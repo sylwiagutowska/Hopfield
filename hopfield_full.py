@@ -72,61 +72,44 @@ def Hopfield(args):
  no_of_lm1_and_2=len(LM[at])
  Plm,dPlm=generate_Plm(10)
  Ylm0=generate_Ylm_0(Plm)
+ Klm=Ylm0 #generate_Klm(Ylm0,LM[at])
  print (at,nlm1,LM[at])
  Hopfield=0.j
  Ax,Bx,Cx,B_and_C_rp,A_rp,B_and_C_r,A_r=0.j,0.j,0.j,0.j,0.j,0.j,0.j
-# [l1,m11]=LM[at][nlm1]
-# if m11==0: tabm=[m11]
-# else: tabm=[-m11,m11]
-# for m1 in tabm:
-#  for nlm2 in range(no_of_lm1_and_2):
-#   [l2,m22]=LM[at][nlm2]
-#   if m22==0: tabm2=[m22]
-#   else: tabm2=[-m22,m22]
-#   for m2 in tabm2:
-#    if l1!=l2 or m1!=m2: continue
-#   print (l1,': ',l2,Hopfield)
  l1,m1,l2,m2=0,0,0,0
- [l1,m1]=LM[at][nlm1]
- for nlm2 in range(len(LM[at])):
-   [l2,m2]=LM[at][nlm2]
-   if l2!=l1 or m1!=m2: continue
-   for l3 in range(n_l):#len(LM[at])):
+ [l1,m10]=LM[at][nlm1]
+ for m1case,m1 in enumerate([m10,-m10]):
+  if m1==0 and m1case==1: continue
+  for nlm2 in range(len(LM[at])):
+   [l2,m20]=LM[at][nlm2]
+   for m2case,m2 in enumerate([m20,-m20]):
+    if m2==0 and m2case==1: continue
+    for l3 in range(n_l):#len(LM[at])):
      for m3 in range(-l3,l3+1):#len(LM[at])):
       for l4 in range(n_l):#len(LM[at])):
         m4=m3-m1
-#      for m4 in range(-l4,l4+1):#len(LM[at])):
-#       if m4!=m3-m1: 
-#        continue 
-#        m4=m3-m1
         if abs(m4)>l4: continue #because -l4<=m4<=l4
-#        Aang1=three_y(l4,m4,1,0,l3,-m3)
-        Aang=spec_int_1(l1,m1,l3,m3,l4,m4,Ylm0)
-        Bang=spec_int_2(l1,m1,l3,m3,l4,m4,Ylm0)
+        Aang=spec_int_1(l1,m1,l3,m3,l4,m4,Ylm0,Klm,m1case)
+        Bang=spec_int_2(l1,m1,l3,m3,l4,m4,Ylm0,Klm,m1case)
         [B_r,A_r]=chosen_r_integrals(r_integrals[nlm1][l3][l4])
         for l5 in range(n_l):#len(LM[at])):
          for m5 in range(-l5,l5+1):#len(LM[at])):
-#          if l5!=l4 or m5!=m4: continue
+          if l5!=l4 or m5!=m4: continue
           almblm_kp=chosen_kp_integrals(blm_integrals[l5][l5+m5][l4][l4+m4])
           for l6 in range(n_l):#len(LM[at])):
             m6=m5-m2
-#            if m6!=m3 or l6!=l3: continue
-#          for m6 in range(-l6,l6+1):#len(LM[at])):
-#           if m6!=m5-m2:  
-#            continue
-#            m6=m5-m2
+            if m6!=m3 or l6!=l3: continue
             if abs(m6)>l6: continue #because -l6<=m6<=l6
             [B_rp,A_rp]=chosen_r_integrals(r_integrals[nlm2][l5][l6])
-#            Aang=4*np.pi/3.*((-1)**(m3+m5))*Aang1*three_y(l6,m6,1,0,l5,-m5)
-            Aangp=spec_int_1(l2,m2,l5,m5,l6,m6,Ylm0)
-            Bangp=spec_int_2(l2,m2,l5,m5,l6,m6,Ylm0)
+            Aangp=spec_int_1(l2,m2,l5,m5,l6,m6,Ylm0,Klm,m2case)
+            Bangp=spec_int_2(l2,m2,l5,m5,l6,m6,Ylm0,Klm,m2case)
             almblm_k=chosen_k_integrals(blm_integrals[l3][l3+m3][l6][l6+m6])
            #from lapw7 ! every alm, blm, clm has to be multiplied by a    prefactor = 1/sqrt( vol(UC) ), so 1 integral  - by 1/vol, 2 integrals, by 1/vol^2 --not needed, lapw2 already does it
             almblm_k_kp=almblm_k*almblm_kp #/(volume**2)
-            AA=np.dot(almblm_k_kp,A_r*A_rp)
-            AB=np.dot(almblm_k_kp,A_r*B_rp)
-            BA=np.dot(almblm_k_kp,B_r*A_rp)
-            BB=np.dot(almblm_k_kp,B_r*B_rp)
+            AA=round_complex(np.dot(almblm_k_kp,A_r*A_rp),9)
+            AB=round_complex(np.dot(almblm_k_kp,A_r*B_rp),9)
+            BA=round_complex(np.dot(almblm_k_kp,B_r*A_rp),9)
+            BB=round_complex(np.dot(almblm_k_kp,B_r*B_rp),9)
 #            hopfield_contrib=(1./(4*np.pi)) *Aang*A #*(1j**(-l3+l4-l5+l6))
             hopfield_contrib=2*np.pi*2*np.pi*( \
              Aang*Aangp*AA- Aang*Bangp*AB -Bang*Aangp*BA+ Bang*Bangp*BB)
@@ -218,7 +201,7 @@ def r_integral(RADWF_at_l3,RADWF_at_l4,Vtot_at,DVDR1,RMESH_at,Z_of_atom):
  #     if norm==0: return [0,0]
  #     else:
 #       print(len(DVDR1),len(RADWF_at_l3),len(RADWF_at_l4),len(RMESH_at))
-       norma=np.trapz(np.multiply(RADWF_at_l3,RADWF_at_l4),x=RMESH_at)
+ #      norma=np.trapz(np.multiply(RADWF_at_l3,RADWF_at_l4),x=RMESH_at)
        Ba_and_C_r=np.trapz(np.multiply(np.multiply(Vtot_at,RADWF_at_l3),(RADWF_at_l4)/RMESH_at),x=RMESH_at)
        Aa_r=np.trapz(np.multiply(np.multiply(DVDR1,RADWF_at_l3),RADWF_at_l4),x=RMESH_at)
        '''

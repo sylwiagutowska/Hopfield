@@ -141,10 +141,9 @@ def read_radwf(radwf_file,n_r,n_at,CIN):
     except:continue
 
  for i in range(len(RADWF)):
-  print('For atom no. '+str(i)+' I found '+str(len(RADWF[i]))+' wave functions u_l(r) at the r-meshes as follows:')
+  print('For atom no. '+str(i)+' I found '+str(len(RADWF[i]))+' wave functions u_l(r) at the r-meshes as follows:' , end =" " )
 #  if not np.any([sum(j) for j in
-  for j in range(len(RADWF[i])):
-   print(len(RADWF[i][j])),
+  for j in range(len(RADWF[i])):    print(len(RADWF[i][j]), end =" " )
   print(' ')
 
  print('Making r-mesh...')
@@ -181,7 +180,7 @@ def div_pot_and_radwf_by_r(Vtot,RADWF,RADWFsmall,RMESH,DR, n_at,LM,Z_of_atoms,EF
  Vtot=[ [np.array([Vtot[i][j][k]-2*Z_of_atoms[i]/RMESH[i][k] for k in range(len(Vtot[i][j]))]) for j in range(len(Vtot[i]))] for i in range(len(Vtot))]  
  '''
 
- Vtot=[ [np.array([(Vtot[i][j][k]/(RMESH[i][k]))/RMESH[i][k]//(4*np.pi)**0.5 for k in range(len(Vtot[i][j]))]) for j in range(len(Vtot[i]))] for i in range(len(Vtot))]  
+ Vtot=[ [np.array([(Vtot[i][j][k]/(RMESH[i][k]))/RMESH[i][k]/(4*np.pi)**0.5 for k in range(len(Vtot[i][j]))]) for j in range(len(Vtot[i]))] for i in range(len(Vtot))]  
  DVDR=[ [  np.gradient(Vtot[at][nlm1],RMESH[at],edge_order=2) for nlm1 in range(len(LM[at]))] for at in range(n_at)] 
 
 #RADWF[i][j][k][0-1] i-atoms, j- l (orbital No), k - r-mesh, [0-1]-large  component of radwf and udot
@@ -195,6 +194,10 @@ def div_pot_and_radwf_by_r(Vtot,RADWF,RADWFsmall,RMESH,DR, n_at,LM,Z_of_atoms,EF
 # Vtot=[Vtot[at][0] for at in range(n_at)]
 # DVDR=[DVDR[at][0] for at in range(n_at)]
 
+ #Vtot,DVDR,RADWF,RADWFsmall,RMESH=make_lipman(RMESH,RADWF,RADWFsmall,Vtot,LM,Z_of_atoms)
+ return Vtot,DVDR,RADWF,RADWFsmall,RMESH
+
+def make_lipman(RMESH,RADWF,RADWFsmall,Vtot,EN,LM,Z_of_atoms):
  h=open('hopfield_calc/hopfield_calc.output1_1')
  tmpp=h.readlines()
  h.close()
@@ -202,8 +205,6 @@ def div_pot_and_radwf_by_r(Vtot,RADWF,RADWFsmall,RMESH,DR, n_at,LM,Z_of_atoms,EF
   if 'POTENTIAL PARAMETERS' in i:
    EN=[float(m.split()[1]) for m in tmpp[ni+2:ni+12]]
    break
-
-
  RMESH0=RMESH.copy()
  RADWF0=RADWF.copy()
  RADWF2=[[[[] for k in range(len(RADWF0[at][l]))] for l in range(len(RADWF0[at]))] for at in range(n_at)]
@@ -218,7 +219,7 @@ def div_pot_and_radwf_by_r(Vtot,RADWF,RADWFsmall,RMESH,DR, n_at,LM,Z_of_atoms,EF
    for k in range(len(RADWF[at][l])):
     RMESH2[at],RADWFsmall2[at][l][k]=interpolate_V(RMESH0[at],RADWFsmall[at][l][k])
 #    if l==0 and k==0: RADWF2[at][l][0]=lipman(0,RMESH2[at],RADWF0[at][l][0],EN[l],Vtot2[at][0],Z_of_atoms[at])
-    if k==0: RADWF2[at][l][0]=lipman(l,RMESH2[at],RADWF0[at][l][0],EF,Vtot2[at][0],Z_of_atoms[at])
+    if k==0: RADWF2[at][l][0]=lipman(l,RMESH2[at],RADWF0[at][l][0],EN[l],Vtot2[at][0],Z_of_atoms[at])
 #    if l==0 and k==0: continue
     else:
 #     RADWF2[at][l][k]=np.zeros(len(RMESH2[at]))
@@ -272,7 +273,61 @@ def div_pot_and_radwf_by_r(Vtot,RADWF,RADWFsmall,RMESH,DR, n_at,LM,Z_of_atoms,EF
 
  return Vtot2,DVDR2,RADWF2,RADWFsmall2,RMESH2
 
-# return Vtot,DVDR,RADWF,RADWFsmall,RMESH
+
+
+
+def div_pot_and_radwf_by_r2(Vtot,RADWF,RADWFsmall,RMESH,DR, n_at,LM,Z_of_atoms,EF):
+
+ Vtot=[ [np.array([(Vtot[i][j][k]/(RMESH[i][k]))/RMESH[i][k]//(4*np.pi)**0.5 for k in range(len(Vtot[i][j]))]) for j in range(len(Vtot[i]))] for i in range(len(Vtot))]  
+ DVDR=[ [  np.gradient(Vtot[at][nlm1],RMESH[at],edge_order=2) for nlm1 in range(len(LM[at]))] for at in range(n_at)] 
+
+ RADWF=    np.transpose(RADWF,axes=(0,1,3,2))
+ RADWFsmall=    np.transpose(RADWFsmall,axes=(0,1,3,2))
+
+
+
+ h=open('hopfield_calc/hopfield_calc.output1_1')
+ tmpp=h.readlines()
+ h.close()
+ for ni,i in enumerate(tmpp):
+  if 'POTENTIAL PARAMETERS' in i:
+   EN=[float(m.split()[1]) for m in tmpp[ni+2:ni+12]]
+   break
+
+
+ RMESH0=RMESH.copy()
+ RADWF0=RADWF.copy()
+
+ for at in range(n_at):
+  for l in range(len(RADWF[at])):
+   for k in range(len(RADWF[at][l])):
+    if k==0: RADWF[at][l][0]=lipman_rel(l,RMESH[at],RADWF[at][l][0],EF,Vtot[at][0],Z_of_atoms[at])
+
+
+
+ print('Write spherical V and radwf to files V_i.dat and RADWF_i.dat...')
+ for i in range(len(Vtot[0])):
+  h=open('V_'+str(i)+'.dat','w')
+  for j in range(len(Vtot[0][i])):
+   h.write(str(RMESH[0][j])+' '+str(Vtot[0][i][j])+'\n')
+  h.close()
+
+
+#RADWF[at][l][u,udot][r]
+ for i in range(len(RADWF)):
+  print('aa')
+  h=open('RADWF_'+str(i)+'.dat','w')
+  h.write('# r , l=0- big component,small component, l=1- big component,small component....\n')
+  for k in range(len(RADWF[i][1][1])):
+   h.write(str(RMESH[i][k])+' ')
+   for j in range(len(RADWF[i])):
+    h.write(str(RADWF[i][j][0][k])+' '+str(RADWF[i][j][1][k])+' '+str(RADWF[i][j][2][k])+' ')
+   h.write('\n')
+  h.close() 
+
+ return Vtot,DVDR,RADWF,RADWFsmall,RMESH
+
+
 
 def interpolate_V(RMESH0,V):
  nib=80
@@ -367,32 +422,34 @@ def lipman_rel(l,RMESH,Rstart,Ef,V2,Z_of_atom): #dirrea.f from kkr
  VIN=V2 +l*(l+1)/RMESH/RMESH
 # rd=RMESH
 # VR=V2
+# V3=VIN
  nr=len(RMESH)
+ h=np.log(RMESH[-1]/RMESH[0])/(nr-1)
+ '''
  rd=np.zeros((nr))
  VR=np.zeros((nr))
- rnot=RMESH[1]
- h=np.log(RMESH[-1]/RMESH[1])/(nr-1)
+ rnot=RMESH[0]
+
  d=np.exp(h)
  rx=rnot
 # rd[0]=RMESH[0]
- rd[0]=rx
- VR[0]=V2[0]
- rx=rx*d
- for m in range(1,nr):
+ VR[0]=V3[0]
+ for m in range(nr):
   rd[m]=rx
 #  VR[m]=tabint(rx,RMESH,V2,nr-1,1,3)
   rx=rx*d
  rd[-1]=RMESH[-1]
- h=open('rmesh.dat','w')
+ f=open('rmesh.dat','w')
  for i in range(nr):
-  h.write(str(rd[i])+' '+str(RMESH[i])+'\n')
- h.close()
+  f.write(str(rd[i])+' '+str(RMESH[i])+'\n')
+ f.close()
  Vf=interp1d(RMESH,V3)
  VR=Vf(rd)
- VR[-1]=V2[-1]
+ VR[-1]=V3[-1]
+ '''
+ VR=V3
+ rd=RMESH
 
-
- h=np.log(RMESH[-1]/RMESH[1])/(nr-1)
  h3=h/3.
  c=2*137.037
  c2=c*c
@@ -471,9 +528,9 @@ def lipman_rel(l,RMESH,Rstart,Ef,V2,Z_of_atom): #dirrea.f from kkr
 # imax=nr-1
 # imin=2
 # ssr[0]=0.
- af=interp1d(rd,a)
- a2=af(RMESH[1:])
- for i in range(1,nr):
-  ssr[i]=(RMESH[i]**g)*a2[i-1] #tabint(RMESH[i],rd,a,imax,imin,3)
+# af=interp1d(rd,a)
+# a2=af(RMESH)
+ for i in range(nr):
+  ssr[i]=(RMESH[i]**g)*a[i] #tabint(RMESH[i],rd,a,imax,imin,3)
  ssr=ssr/(simps(ssr*ssr,RMESH)**0.5)
  return ssr

@@ -44,7 +44,7 @@ class inputs:
   prefix=os.getcwd().split('/')[-1]
   n_l=5 #n_l nieograniczone daje dokladnie te same wyniki co n_l=5; n_l=4 zmienia wynik o 0.01%
   nk=48
-  def run_calculations():
+  def run_calculations(self):
    yn='n'
    yn=input('should I run calc? y/[n]: ')
    if yn=='y': 
@@ -57,7 +57,7 @@ class inputs:
 
 
 def run_calc(inputs):
-
+ print(inputs.so)
 # if os.stat(inputs.prefix+'.inso').st_size!=0: so=' -so '
  os.system('rm -r hopfield_calc_old; mv hopfield_calc hopfield_calc_old; cp -r run_lapw  hopfield_calc')
  os.system('cp .machines hopfield_calc')
@@ -65,11 +65,11 @@ def run_calc(inputs):
 # os.system('pwd')
 # exit()
  os.system('rename_files '+inputs.prefix+' hopfield_calc')
- os.system("x kgen <<'EOF'\n0\n+"+str(inputs.nk)+" "+str(inputs.nk)+" "+str(inputs.nk)+" \n1\nEOF")
+ os.system("x kgen <<'EOF'\n0\n+"+str(inputs.nk)+" "+str(inputs.nk)+" "+str(inputs.nk)+" \n0\nEOF")
  os.system("sed -i 's/NR2V/R2V/' hopfield_calc.in0")
+# os.system("sed -i 's/1      (GLOBAL/0      (GLOBAL/' hopfield_calc.in1")
 # os.system("sed -i 's/CONT 1/CONT 0/' hopfield_calc.in1")
 # os.system("sed -i 's/STOP 1/STOP 0/' hopfield_calc.in1")
- os.system("sed -i 's/1      (GLOBAL/0      (GLOBAL/' hopfield_calc.in1")
  '''
  h=open("hopfield_calc.in1","r")
  tmp=h.readlines()
@@ -90,14 +90,16 @@ def run_calc(inputs):
  for i in tmp2: h.write(i)
  h.close()
  '''
- os.system("run_lapw -ec 0.00001 -cc 0.001 "+so+" -p")
+# os.system("run_lapw  -i 100  -p")
+# os.system("rm -r run_nrel_lapw; save_lapw -d run_nrel_lapw")
+ os.system("run_lapw -ec 0.00000001 -cc 0.0001 -i 100 "+inputs.so+" -p")
  os.system("rm -r run_lapw; save_lapw -d run_lapw")
  os.system("x lapw1 -p")
- if len(so): os.system("x lapwso -p")
+ if len(inputs.so): os.system("x lapwso -p")
 # os.system("sed -i 's/TOT /FERMI /' hopfield_calc.in2")
- os.system("x lapw2 "+so+" -alm  -p")
- os.system("x lapw2 "+so+" -qtl  -p")
- os.system("x tetra ; x tetra "+so+"-p")
+ os.system("x lapw2 "+inputs.so+" -alm  -p")
+ os.system("x lapw2 "+inputs.so+" -qtl  -p")
+ os.system("x tetra ; x tetra "+inputs.so+"-p")
  os.chdir('..')
 
 #so=if_so()

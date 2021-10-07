@@ -1,5 +1,5 @@
 #class math_stuff:
-from numpy import real,imag,isnan,pi,conj,sin,trapz,cos,array,transpose,flipud,gradient
+from numpy import real,imag,isnan,pi,conj,sin,trapz,cos,array,transpose,flipud,gradient,round,zeros
 from scipy.integrate  import quad,dblquad
 from scipy.misc import derivative 
 from scipy.special  import sph_harm,lpmn
@@ -8,7 +8,7 @@ from scipy.special  import sph_harm,lpmn
 def generate_Plm(lmax):
  #Plm[l][m][cos(tet)]
 # scipy.special.lpmn(m,l,cos(theta)) return P_lm and dP_lm/d(cos(theta))=-sin(theta)*dP_lm/d/theta
- [Plm,dPlm]=transpose(array([lpmn(lmax,lmax,cos(pi*x/500.)) for x in range(500)]),axes=(1,3,2,0))
+ [Plm,dPlm]=transpose(array([lpmn(lmax,lmax,cos(pi*x/500.)) for x in range(501)]),axes=(1,3,2,0))
  Plm=[[ Plm[l][m] for m in range(l+1)] for l in range(lmax)]
  dPlm=[[ dPlm[l][m] for m in range(l+1)] for l in range(lmax)]
  #Plm[l][-m]= (-1)**m*sil(l-m)/sil(l+m)*Plm
@@ -28,8 +28,87 @@ def generate_Ylm_0(Plm):
 # Ylm=[[ array([ sph_harm(m,l,0,tet/500.*pi) for tet in range(500)]) for m in range(-l,l+1)] for l  in range(10)]
  return Ylm
 
+def SQRT(x):
+ return x**0.5
 
+def kurkisuonio(l,m):
+ if l==0 and m==0: return 1
+ elif l==3 and m==2: return 1.
+ elif l==4 and m==0: return .5*(7/3.)**0.5
+ elif l==4 and m==4: return .5*(5/3.)**0.5
+ elif l==6 and m==0: return .5*(.5)**0.5
+ elif l==6 and m==2: return .25*(11.)**0.5
+ elif l==6 and m==4: return -.5*(7/2.)**0.5
+ elif l==6 and m==6: return -.25*SQRT(5.)
+ elif l==7 and m==2: return .5*SQRT(13./6.)
+ elif l==7 and m==6: return .5*SQRT(11./6.)
+ elif l==8 and m==0: return .125*SQRT(33.)
+ elif l==8 and m==4: return .25*SQRT(7./3.)
+ elif l==8 and m==8: return .125*SQRT(65./3.)
+ elif l==9 and m==2: return .25*SQRT(3.)
+ elif l==9 and m==4: return .5*SQRT(17./6.)
+ elif l==9 and m==6: return -.25*SQRT(13.)
+ elif l==9 and m==8: return -.5*SQRT(7./6.)
+ elif l==10 and m==0: return .125*SQRT(65./6.)
+ elif l==10 and m==2: return .125*SQRT(247./6.)
+ elif l==10 and m==4: return -.25*SQRT(11./2.)
+ elif l==10 and m==6: return 0.0625*SQRT(19./3.)
+ elif l==10 and m==8: return -.125*SQRT(187./6.)
+ elif l==10 and m==10: return -.0625*SQRT(85.)
 
+def generate_Klm(Ylm,allLM):
+#from SRC_lapw5/charge.f and sum.f
+#we use them for V. The reason is that wien2k uses symetrized spherical fctions https://onlinelibrary.wiley.com/iucr/itc/Db/ch2o2v0001/#sec2o2o14o3
+ ANG=[]
+ ANG2=[]
+ i=0
+ print(allLM)
+ for lm in allLM:
+   [l,m]=lm
+   minu=1.
+   imag1=1.
+   if l<0:
+    imag1=-1.j
+    minu=-1.
+   if m%2:
+    imag1=-imag1
+    minu=-minu
+   if m==0:
+    ANG.append(Ylm[l][m+l])
+   else:
+    ANG.append((Ylm[l][m+l]+minu*Ylm[l][m-l])*(2**(-0.5))*imag1)
+ i=0
+ for lm in allLM:
+   [l,m]=lm
+   if (l==0 and m==0) or (l==-3 and m==2):
+    ANG2.append(ANG[l][m+l])
+    i+=1
+   elif l==4 or l==6 or l==-7 or l==-9:
+    c1=kurkisuonio(abs(l),m)
+    c2=kurkisuonio(abs(l),m+4)
+    an=(c1*ANG[i]+c2*ANG[i+1])
+    ANG2.append(c1*ang)
+    ANG2.append(c2*ang)
+    i=i+2
+   elif l==8 or l==10:
+    c1=kurkisuonio(abs(l),m)
+    c2=kurkisuonio(abs(l),m+4)
+    c3=kurisuonio(abs(l),m+8)
+    an=(c1*ANG[i]+c2*ANG[i+1]+c3*ANG[i+2])
+    ANG2.append(c1*ang)
+    ANG2.append(c2*ang)
+    ANG2.append(c3*ang)
+    i=i+3
+ return ANG2
+'''
+for [l,m] in LM:
+ if m%2: 
+  ylmp=-2**(-0.5)*(Ylm[l][m+l]-Ylm[l][m-l])
+  ylmm=1j*2**(-0.5)*(Ylm[l][m+l]+Ylm[l][m-l])
+ else: 
+  ylmp=2**(-0.5)*(Ylm[l][m+l]+Ylm[l][m-l])
+  ylmm=-1j*2**(-0.5)*(Ylm[l][m+l]-Ylm[l][m-l])
+'''
 def round_complex(z,precis):
   return round(z.real,precis)+round(z.imag,precis)*1j
 def sil(n):
@@ -89,11 +168,24 @@ def ynim(m,l,tet,fi):
   return imag(sph_harm(m1,l1,fi,tet))
 
 
-def spec_int_1(l1,m1,l2,m2,l3,m3,Ylm0):
+def spec_int_1(l1,m1,l2,m2,l3,m3,Ylm0,Klm,m1case):
  # if m1==0: return 0.
-  tet=[t*pi/500 for t in range(500)]
-  out1=trapz(cos(tet)*sin(tet)*real(Ylm0[l1][m1+l1]*conj(Ylm0[l2][m2+l2])*Ylm0[l3][m3+l3]),x=tet)
-  out2=trapz(cos(tet)*sin(tet)*imag(Ylm0[l1][m1+l1]*conj(Ylm0[l2][m2+l2])*Ylm0[l3][m3+l3]),x=tet)
+  tet=[t*pi/500 for t in range(501)]
+  if (m1case==0 and m1<0) or (m1case and m1>0): 
+   x=1j*2**(-0.5)
+   y=-1j*(-1)**m1*2**(-0.5)
+  elif (m1case==0 and m1>0) or (m1case and m1<0): 
+   x=(-1)**m1*2**(-0.5)
+   y=2**(-0.5)
+  else: 
+   x=1
+   y=1
+  if m1case==0: 
+   out1=x*trapz(cos(tet)*sin(tet)*real(Klm[l1][m1+l1]*conj(Ylm0[l2][m2+l2])*Ylm0[l3][m3+l3]),x=tet)
+   out2=x*trapz(cos(tet)*sin(tet)*imag(Klm[l1][m1+l1]*conj(Ylm0[l2][m2+l2])*Ylm0[l3][m3+l3]),x=tet)
+  else: 
+   out1=y*trapz(cos(tet)*sin(tet)*real(Klm[l1][m1+l1]*conj(Ylm0[l2][m2+l2])*Ylm0[l3][m3+l3]),x=tet)
+   out2=y*trapz(cos(tet)*sin(tet)*imag(Klm[l1][m1+l1]*conj(Ylm0[l2][m2+l2])*Ylm0[l3][m3+l3]),x=tet)
 #  out1=quad(lambda tet: real(Ylm0[l1][m1+l1][int(tet)]*conj(Ylm0[l2][m2+l2][int(tet)])*Ylm0[l3][m3+l3][int(tet)]), 0.0, 500)[0]*pi/500
 #  out2=quad(lambda tet: imag(Ylm0[l1][m1+l1][int(tet)]*conj(Ylm0[l2][m2+l2][int(tet)])*Ylm0[l3][m3+l3][int(tet)]), 0.0, 500)[0]*pi/500
 
@@ -102,15 +194,30 @@ def spec_int_1(l1,m1,l2,m2,l3,m3,Ylm0):
    return 0.j
   return complex(round(out1,6),round(out2,6))
 
-def spec_int_2(l1,m1,l2,m2,l3,m3,Ylm0):
+def spec_int_2(l1,m1,l2,m2,l3,m3,Ylm0,Klm,m1case):
  # if m1==0: return 0.
-  tet=[t*pi/500 for t in range(500)]
-  dY=gradient(Ylm0[l1][m1+l1],tet)
-  out1=trapz(sin(tet)**2.*real(dY*conj(Ylm0[l2][m2+l2])*Ylm0[l3][m3+l3]),x=tet)
-  out2=trapz(sin(tet)**2.*imag(dY*conj(Ylm0[l2][m2+l2])*Ylm0[l3][m3+l3]),x=tet)
+  tet=[t*pi/500 for t in range(501)]
+  if (m1case==0 and m1<0) or (m1case and m1>0): 
+   x=1j*2**(-0.5)
+   y=-1j*(-1)**m1*2**(-0.5)
+  elif (m1case==0 and m1>0) or (m1case and m1<0): 
+   x=(-1)**m1*2**(-0.5)
+   y=2**(-0.5)
+  else: 
+   x=1
+   y=1
+  if m1case==0: 
+   if l1==0: dY= zeros(501)
+   else: dY= round(gradient(Klm[l1][m1+l1],tet),6)
+   out1=x*trapz(sin(tet)**2.*real(dY*conj(Ylm0[l2][m2+l2])*Ylm0[l3][m3+l3]),x=tet)
+   out2=x*trapz(sin(tet)**2.*imag(dY*conj(Ylm0[l2][m2+l2])*Ylm0[l3][m3+l3]),x=tet)
+  else: 
+   if l1==0: dY= zeros(501)
+   else: dY= round(gradient(Klm[l1][m1+l1],tet),6)
+   out1=y*trapz(sin(tet)**2.*real(dY*conj(Ylm0[l2][m2+l2])*Ylm0[l3][m3+l3]),x=tet)
+   out2=y*trapz(sin(tet)**2.*imag(dY*conj(Ylm0[l2][m2+l2])*Ylm0[l3][m3+l3]),x=tet)
 #  out1=quad(lambda tet: real(Ylm0[l1][m1+l1][int(tet)]*conj(Ylm0[l2][m2+l2][int(tet)])*Ylm0[l3][m3+l3][int(tet)]), 0.0, 500)[0]*pi/500
 #  out2=quad(lambda tet: imag(Ylm0[l1][m1+l1][int(tet)]*conj(Ylm0[l2][m2+l2][int(tet)])*Ylm0[l3][m3+l3][int(tet)]), 0.0, 500)[0]*pi/500
-
   if isnan(out1): # or isnan(out2): 
    print('spec_int',l1,m1,l2,m2,l3,m3,':infty')
    return 0.j
